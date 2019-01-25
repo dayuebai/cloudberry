@@ -26,11 +26,13 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
   protected def postWithCheckingStatus[T](query: String, succeedHandler: WSResponse => T, failureHandler: WSResponse => T): Future[T] = {
     post(query).map { wsResponse =>
-      if (wsResponse.json.asInstanceOf[JsObject].value.get("status") == Some(JsString("success"))) {
+      if (wsResponse.status == 200) {
+        println("Query succeeded")
+        Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
         succeedHandler(wsResponse)
       }
       else {
-        Logger.error("Query failed:" + Json.prettyPrint(wsResponse.json))
+        Logger.error("Query failed: " + Json.prettyPrint(wsResponse.json))
         failureHandler(wsResponse)
       }
     }
@@ -38,19 +40,19 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
   def post(query: String): Future[WSResponse] = {
     Logger.debug("Query:" + query)
-    val f = wSClient.url(url).withRequestTimeout(Duration.Inf).post(params(query))
+    val f = wSClient.url(url + "/berry.meta").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(query)
     f.onFailure(wsFailureHandler(query))
     f
   }
 
   protected def wsFailureHandler(query: String): PartialFunction[Throwable, Unit] = {
-    case e: Throwable => Logger.error("WS Error:" + query, e)
+    case e: Throwable => Logger.error("WS ERROR:" + query, e)
       throw e
   }
 
-  protected def params(query: String): Map[String, Seq[String]] = {
-    Map("statement" -> Seq(query), "mode" -> Seq("synchronous"), "include-results" -> Seq("true"))
-  }
+//  protected def params(query: String): Map[String, Seq[String]] = {
+//
+//  }
 }
 
 object ElasticsearchConn {
