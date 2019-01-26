@@ -58,4 +58,3 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 object ElasticsearchConn {
   val defaultEmptyResponse = Json.toJson(Seq(Seq.empty[JsValue]))
 }
-

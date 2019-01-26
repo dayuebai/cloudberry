@@ -30,19 +30,21 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   protected val allFieldVar: String = "*"
 
+  protected val suffix: String = "";
+
   def generate(query: IQuery, schemaMap: Map[String, AbstractSchema]): String = {
     println("Start to generate query: " + query);
-//    val (temporalSchemaMap, lookupSchemaMap) = GeneratorUtil.splitSchemaMap(schemaMap)
-//    val result = query match {
-//      case q: Query => parseQuery(q, temporalSchemaMap)
+    val (temporalSchemaMap, lookupSchemaMap) = GeneratorUtil.splitSchemaMap(schemaMap)
+    val result = query match {
+      case q: Query => parseQuery(q, temporalSchemaMap)
 //      case q: CreateView => parseCreate(q, temporalSchemaMap)
 //      case q: AppendView => parseAppend(q, temporalSchemaMap)
 //      case q: UpsertRecord => parseUpsert(q, schemaMap)
 //      case q: DropView => parseDrop(q, schemaMap)
 //      case q: DeleteRecord => parseDelete(q, schemaMap)
-//      case _ => ???
-//    }
-    ""
+      case _ => ???
+    }
+    s"$result$suffix"
   }
 
   def calcResultSchema(query: Query, schema: Schema): Schema = {
@@ -52,34 +54,42 @@ class ElasticsearchGenerator extends IQLGenerator {
       ???
     }
   }
-//
-//  def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
-//    println("Call parseQuery")
-//    println("Query: " + query)
-//    var queryBuilder = Json.obj()
-//
-//    val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
-//    println("dataset name: " + query.dataset)
-//    queryBuilder += ("method" -> JsString("search"))
-//    queryBuilder += ("dataset" -> JsString(query.dataset))
-//
-//    val (resultAfterLookup, queryAfterLookup) = parseLookup(query.lookup, exprMap, queryBuilder, false)
-//
-//    val (resultAfterUnnest, queryAfterUnnest) = parseUnnest(query.unnest, resultAfterLookup.exprMap, queryAfterLookup)
-//    val unnestTests = resultAfterUnnest.strs
-//
-//    val (resultAfterFilter, queryAfterFilter) = parseFilter(query.filter, resultAfterUnnest.exprMap, unnestTests, queryAfterUnnest)
-//
-//    val (resultAfterAppend, queryAfterAppend) = parseAppend(query.append, resultAfterFilter.exprMap, queryAfterFilter)
-//
-//    val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, resultAfterAppend.exprMap, queryAfterAppend)
-//
-//    val (resultAfterSelect, queryAfterSelect) = parseSelect(query.select, resultAfterGroup.exprMap, query, queryAfterGroup)
+
+  def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
+    println("Call parseQuery")
+    println("Query: " + query)
+    var queryBuilder = Json.obj()
+
+    val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
+    println("SchemaMap: " + schemaMap)
+    println("ExprMap: " + exprMap)
+
+//    Query: Query(berry.meta,List(),List(),List(),List(),None,Some(SelectStatement(List(TimeField(stats.createTime,false)),List(ASC),2147483647,0,List())),None,false)
+//    SchemaMap: Map(berry.meta -> Schema(berry.MetaType,List(StringField(name,false), TimeField(stats.createTime,false)),List(),List(StringField(name,false)),TimeField(stats.createTime,false)))
+//    ExprMap: Map(name -> FieldExpr(name,name), stats.createTime -> FieldExpr(stats.createTime,stats.createTime), * -> FieldExpr(*,*))
+
+    println("dataset name: " + query.dataset)
+    queryBuilder += ("method" -> JsString("search"))
+    queryBuilder += ("dataset" -> JsString(query.dataset))
+
+    val (resultAfterLookup, queryAfterLookup) = parseLookup(query.lookup, exprMap, queryBuilder, false)
+
+    val (resultAfterUnnest, queryAfterUnnest) = parseUnnest(query.unnest, resultAfterLookup.exprMap, queryAfterLookup)
+    val unnestTests = resultAfterUnnest.strs
+
+    val (resultAfterFilter, queryAfterFilter) = parseFilter(query.filter, resultAfterUnnest.exprMap, unnestTests, queryAfterUnnest)
+
+    val (resultAfterAppend, queryAfterAppend) = parseAppend(query.append, resultAfterFilter.exprMap, queryAfterFilter)
+
+    val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, resultAfterAppend.exprMap, queryAfterAppend)
+
+    val (resultAfterSelect, queryAfterSelect) = parseSelect(query.select, resultAfterGroup.exprMap, query, queryAfterGroup)
 //
 //    val (resultAfterGlobalAggr, queryAfterGlobalAggr) = parseGlobalAggr(query.globalAggr, resultAfterSelect.exprMap, query, queryAfterSelect)
 //
 //    queryAfterGlobalAggr.toString()
-//  }
+    ""
+  }
 //
 //  def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
 //    println("Call parseCreate")
@@ -138,24 +148,23 @@ class ElasticsearchGenerator extends IQLGenerator {
 //    return ""
 //  }
 //
-//  // Private
-//  private def parseLookup(lookups: Seq[LookupStatement],
-//                          exprMap: Map[String, FieldExpr],
-//                          queryBuilder: JsObject,
-//                          inGroup: Boolean): (ParsedResult, JsObject) = {
-//    (ParsedResult(Seq.empty, exprMap), queryBuilder)
-//  }
-//
-//  private def parseUnnest(unnest: Seq[UnnestStatement],
-//                          exprMap: Map[String, FieldExpr], queryAfterLookup: JsObject): (ParsedResult, JsObject) = {
-//    (ParsedResult(Seq.empty, exprMap), queryAfterLookup)
-//  }
-//
-//  private def parseFilter(filters: Seq[FilterStatement], exprMap: Map[String, FieldExpr], unnestTestStrs: Seq[String], queryAfterUnnest: JsObject): (ParsedResult, JsObject) = {
-//    var result = queryAfterUnnest
-//    if (filters.isEmpty && unnestTestStrs.isEmpty) {
-//      (ParsedResult(Seq.empty, exprMap), result)
-//    } else {
+  // Private
+  private def parseLookup(lookups: Seq[LookupStatement],
+                          exprMap: Map[String, FieldExpr],
+                          queryBuilder: JsObject,
+                          inGroup: Boolean): (ParsedResult, JsObject) = {
+    (ParsedResult(Seq.empty, exprMap), queryBuilder)
+  }
+
+  private def parseUnnest(unnest: Seq[UnnestStatement],
+                          exprMap: Map[String, FieldExpr], queryAfterLookup: JsObject): (ParsedResult, JsObject) = {
+    (ParsedResult(Seq.empty, exprMap), queryAfterLookup)
+  }
+
+  private def parseFilter(filters: Seq[FilterStatement], exprMap: Map[String, FieldExpr], unnestTestStrs: Seq[String], queryAfterUnnest: JsObject): (ParsedResult, JsObject) = {
+    if (filters.isEmpty && unnestTestStrs.isEmpty) {
+      (ParsedResult(Seq.empty, exprMap), queryAfterUnnest)
+    } else {
 //      val filterStrs = filters.map { filter =>
 //        parseFilterRelation(filter, exprMap(filter.field.name).refExpr)
 //      }
@@ -164,17 +173,18 @@ class ElasticsearchGenerator extends IQLGenerator {
 //
 //      result += ("query" -> Json.obj("bool" -> Json.parse(filterStr)))
 //      println("result after parse filter: " + result)
-//      (ParsedResult(Seq.empty, exprMap), result)
-//    }
-//  }
-//
-//  private def parseAppend(appends: Seq[AppendStatement], exprMap: Map[String, FieldExpr], queryAfterFilter: JsObject): (ParsedResult, JsObject) = {
-//    (ParsedResult(Seq.empty, exprMap), queryAfterFilter)
-//  }
-//
-//  private def parseGroupby(groupOpt: Option[GroupStatement],
-//                           exprMap: Map[String, FieldExpr],
-//                           queryAfterAppend: JsObject): (ParsedResult, JsObject) = {
+      (ParsedResult(Seq.empty, exprMap), queryAfterUnnest)
+    }
+  }
+
+  private def parseAppend(appends: Seq[AppendStatement], exprMap: Map[String, FieldExpr], queryAfterFilter: JsObject): (ParsedResult, JsObject) = {
+    (ParsedResult(Seq.empty, exprMap), queryAfterFilter)
+  }
+
+  private def parseGroupby(groupOpt: Option[GroupStatement],
+                           exprMap: Map[String, FieldExpr],
+                           queryAfterAppend: JsObject): (ParsedResult, JsObject) = {
+    (ParsedResult(Seq.empty, exprMap), queryAfterAppend)
 //    var result = queryAfterAppend
 //    groupOpt match {
 //      case Some(group) =>
@@ -220,13 +230,12 @@ class ElasticsearchGenerator extends IQLGenerator {
 //      case None =>
 //        (ParsedResult(Seq.empty, exprMap), result)
 //    }
-//  }
-//
-//  private def parseSelect(selectOpt: Option[SelectStatement],
-//                          exprMap: Map[String, FieldExpr], query: Query,
-//                          queryAfterGroup: JsObject): (ParsedResult, JsObject) = {
-//    var result = queryAfterGroup
-//
+  }
+
+  private def parseSelect(selectOpt: Option[SelectStatement],
+                          exprMap: Map[String, FieldExpr], query: Query,
+                          queryAfterGroup: JsObject): (ParsedResult, JsObject) = {
+    (ParsedResult(Seq.empty, exprMap), queryAfterGroup)
 //    selectOpt match {
 //      case Some(select) =>
 //        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
@@ -285,8 +294,8 @@ class ElasticsearchGenerator extends IQLGenerator {
 //        println("in parseSelect function, case None is matched")
 //        (ParsedResult(Seq.empty, exprMap), result)
 //    }
-//  }
-//
+  }
+
 //  private def parseProject(exprMap: Map[String, FieldExpr]): String = {
 //    return ""
 //  }
@@ -330,21 +339,21 @@ class ElasticsearchGenerator extends IQLGenerator {
 //    }
 //    (ParsedResult(Seq.empty, exprMap), result)
 //  }
-//
-//  protected def initExprMap(dataset: String, schemaMap: Map[String, AbstractSchema]): Map[String, FieldExpr] = {
-//    // Type of val schema: Schema
-//    val schema = schemaMap(dataset)
-//    schema.fieldMap.mapValues { f =>
-//      f.dataType match {
-//        case DataType.Record => FieldExpr(allFieldVar, allFieldVar) // TODO: e.g. AllField, consider other cases
-//        case DataType.Hierarchy => FieldExpr(allFieldVar, allFieldVar) // TODO: to be implemented
-//        case _ => {
-//          FieldExpr(f.name, f.name)
-//        }
-//      }
-//    }
-//  }
-//
+
+  protected def initExprMap(dataset: String, schemaMap: Map[String, AbstractSchema]): Map[String, FieldExpr] = {
+    // Type of val schema: Schema
+    val schema = schemaMap(dataset)
+    schema.fieldMap.mapValues { f =>
+      f.dataType match {
+        case DataType.Record => FieldExpr(allFieldVar, allFieldVar) // TODO: e.g. AllField, consider other cases
+        case DataType.Hierarchy => FieldExpr(allFieldVar, allFieldVar) // TODO: to be implemented
+        case _ => {
+          FieldExpr(f.name, f.name)
+        }
+      }
+    }
+  }
+
 //  protected def parseFilterRelation(filter: FilterStatement, fieldExpr: String): String = {
 //    if ((filter.relation == Relation.isNull || filter.relation == Relation.isNotNull) &&
 //        filter.field.dataType != DataType.Bag && filter.field.dataType != DataType.Hierarchy) {
