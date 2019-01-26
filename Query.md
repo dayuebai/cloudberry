@@ -1,3 +1,9 @@
+# Setting
+Configure index.max_result_window:
+```
+curl -X PUT "http://localhost:9200/berry.meta/_settings" -H 'Content-Type: application/json' -d '{ "index" : { "max_result_window" : 2147483647 } }'
+```
+
 # Query 1
 
 AsterixDB:
