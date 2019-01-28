@@ -30,8 +30,6 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   protected val allFieldVar: String = "*"
 
-  protected val suffix: String = "";
-
   def generate(query: IQuery, schemaMap: Map[String, AbstractSchema]): String = {
     println("Start to generate query: " + query);
     val (temporalSchemaMap, lookupSchemaMap) = GeneratorUtil.splitSchemaMap(schemaMap)
@@ -44,7 +42,8 @@ class ElasticsearchGenerator extends IQLGenerator {
 //      case q: DeleteRecord => parseDelete(q, schemaMap)
       case _ => ???
     }
-    s"$result$suffix"
+    println("Translated to: " + result)
+    result
   }
 
   def calcResultSchema(query: Query, schema: Schema): Schema = {
@@ -64,11 +63,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     println("SchemaMap: " + schemaMap)
     println("ExprMap: " + exprMap)
 
-//    Query: Query(berry.meta,List(),List(),List(),List(),None,Some(SelectStatement(List(TimeField(stats.createTime,false)),List(ASC),2147483647,0,List())),None,false)
-//    SchemaMap: Map(berry.meta -> Schema(berry.MetaType,List(StringField(name,false), TimeField(stats.createTime,false)),List(),List(StringField(name,false)),TimeField(stats.createTime,false)))
-//    ExprMap: Map(name -> FieldExpr(name,name), stats.createTime -> FieldExpr(stats.createTime,stats.createTime), * -> FieldExpr(*,*))
-
-    println("dataset name: " + query.dataset)
+//    println("dataset name: " + query.dataset)
     queryBuilder += ("method" -> JsString("search"))
     queryBuilder += ("dataset" -> JsString(query.dataset))
 
@@ -84,11 +79,11 @@ class ElasticsearchGenerator extends IQLGenerator {
     val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, resultAfterAppend.exprMap, queryAfterAppend)
 
     val (resultAfterSelect, queryAfterSelect) = parseSelect(query.select, resultAfterGroup.exprMap, query, queryAfterGroup)
-//
-//    val (resultAfterGlobalAggr, queryAfterGlobalAggr) = parseGlobalAggr(query.globalAggr, resultAfterSelect.exprMap, query, queryAfterSelect)
-//
-//    queryAfterGlobalAggr.toString()
-    ""
+
+    val (resultAfterGlobalAggr, queryAfterGlobalAggr) = parseGlobalAggr(query.globalAggr, resultAfterSelect.exprMap, query, queryAfterSelect)
+
+    queryAfterGlobalAggr.toString()
+
   }
 //
 //  def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
@@ -185,6 +180,7 @@ class ElasticsearchGenerator extends IQLGenerator {
                            exprMap: Map[String, FieldExpr],
                            queryAfterAppend: JsObject): (ParsedResult, JsObject) = {
     (ParsedResult(Seq.empty, exprMap), queryAfterAppend)
+
 //    var result = queryAfterAppend
 //    groupOpt match {
 //      case Some(group) =>
@@ -235,75 +231,77 @@ class ElasticsearchGenerator extends IQLGenerator {
   private def parseSelect(selectOpt: Option[SelectStatement],
                           exprMap: Map[String, FieldExpr], query: Query,
                           queryAfterGroup: JsObject): (ParsedResult, JsObject) = {
-    (ParsedResult(Seq.empty, exprMap), queryAfterGroup)
-//    selectOpt match {
-//      case Some(select) =>
-//        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
-//        val orderStrs = select.orderOn.zip(select.order).map {
-//          case (orderOn, order) =>
-//            val expr = orderOn.name
-//            val orderStr = if (order == SortOrder.DSC) "desc" else "asc"
-//            s"""|{"$expr": {"order": "$orderStr"}}""".stripMargin
-//        }
+    var shallowQueryAfterGroup = queryAfterGroup
+    selectOpt match {
+      case Some(select) =>
+        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
+        val orderStrs = select.orderOn.zip(select.order).map {
+          case (orderOn, order) =>
+            val expr = orderOn.name
+            val orderStr = if (order == SortOrder.DSC) "desc" else "asc"
+            s"""|{"$expr": {"order": "$orderStr"}}""".stripMargin
+        }
 //        println("orderStrs: " + orderStrs)
-//        val orderStr =
-//          if (!orderStrs.isEmpty) {
-//            orderStrs.mkString("[", ",", "]")
-//          } else {
-//            ""
-//          }
-//        println("orderStr: " + orderStr)
-//
-//        val limit = select.limit
-//        val offset = select.offset
-//        println("limitStr: " + limit)
-//        println("offsetStr: " + offset)
-//
-//        if (select.fields.isEmpty) {
-//          producedExprs ++= exprMap
-//        } else {
-//          select.fields.foreach {
-//            case AllField => producedExprs ++= exprMap
-//            case field => producedExprs += field.name -> exprMap(field.name)
-//          }
-//        }
-//        val newExprMap = producedExprs.result().toMap
-//        val projectStr = if (select.fields.isEmpty) {
-//          if (query.hasUnnest || query.hasGroup) {
-//            parseProject(exprMap)
-//          } else {
-//            println("select.fields is empty & no unnest & no group")
-//            // return empty string
-//            ""
-//          }
-//        } else {
-//          println("select.fields is not empty")
-//          parseProject(newExprMap)
-//        }
-//
-//        if (!projectStr.isEmpty()) {
-//          println("projectStr is not empty")
-//        }
-//        result += ("sort" -> Json.parse(orderStr))
-//        result += ("size" -> JsNumber(limit))
-//        result += ("from" -> JsNumber(offset))
-//        println("result: " + result)
-//
-//        (ParsedResult(Seq.empty, newExprMap), result)
-//      case None =>
-//        println("in parseSelect function, case None is matched")
-//        (ParsedResult(Seq.empty, exprMap), result)
-//    }
+        val orderStr =
+          if (!orderStrs.isEmpty) {
+            orderStrs.mkString("[", ",", "]")
+          } else {
+            ""
+          }
+        println("orderStr: " + orderStr)
+
+        val limit = select.limit
+        val offset = select.offset
+        println("limitStr: " + limit)
+        println("offsetStr: " + offset)
+
+        if (select.fields.isEmpty) {
+          producedExprs ++= exprMap
+        } else {
+          select.fields.foreach {
+            case AllField => producedExprs ++= exprMap
+            case field => producedExprs += field.name -> exprMap(field.name)
+          }
+        }
+        val newExprMap = producedExprs.result().toMap
+        val projectStr = if (select.fields.isEmpty) {
+          if (query.hasUnnest || query.hasGroup) {
+            parseProject(exprMap)
+          } else {
+            println("select.fields is empty & no unnest & no group")
+            // SQLPP: s"select value $sourceVar"
+            // Elastic: select all fields
+            ""
+          }
+        } else {
+          println("select.fields is not empty")
+          parseProject(newExprMap)
+        }
+
+        if (!projectStr.isEmpty()) {
+          println("projectStr is not empty")
+        }
+        shallowQueryAfterGroup += ("sort" -> Json.parse(orderStr))
+        shallowQueryAfterGroup += ("size" -> JsNumber(limit))
+        shallowQueryAfterGroup += ("from" -> JsNumber(offset))
+
+        (ParsedResult(Seq.empty, newExprMap), shallowQueryAfterGroup)
+
+
+      case None =>
+        println("in parseSelect function, case None is matched")
+        (ParsedResult(Seq.empty, exprMap), shallowQueryAfterGroup)
+    }
   }
 
-//  private def parseProject(exprMap: Map[String, FieldExpr]): String = {
-//    return ""
-//  }
-//
-//  private def parseGlobalAggr(globalAggrOpt: Option[GlobalAggregateStatement],
-//                              exprMap: Map[String, FieldExpr], query: Query,
-//                              queryAfterSelect: JsObject): (ParsedResult, JsObject) = {
-//    var result = queryAfterSelect
+  private def parseProject(exprMap: Map[String, FieldExpr]): String = {
+    return ""
+  }
+
+  private def parseGlobalAggr(globalAggrOpt: Option[GlobalAggregateStatement],
+                              exprMap: Map[String, FieldExpr], query: Query,
+                              queryAfterSelect: JsObject): (ParsedResult, JsObject) = {
+    var shallowQueryAfterSelect = queryAfterSelect
 //    globalAggrOpt match {
 //      case Some(globalAggr) =>
 //        val aggr = globalAggr.aggregate
@@ -337,8 +335,8 @@ class ElasticsearchGenerator extends IQLGenerator {
 //      case None =>
 //        (ParsedResult(Seq.empty, exprMap), result)
 //    }
-//    (ParsedResult(Seq.empty, exprMap), result)
-//  }
+    (ParsedResult(Seq.empty, exprMap), shallowQueryAfterSelect)
+  }
 
   protected def initExprMap(dataset: String, schemaMap: Map[String, AbstractSchema]): Map[String, FieldExpr] = {
     // Type of val schema: Schema

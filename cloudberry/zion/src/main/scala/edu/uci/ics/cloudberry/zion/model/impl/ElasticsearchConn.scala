@@ -2,7 +2,7 @@ package edu.uci.ics.cloudberry.zion.model.impl
 
 import edu.uci.ics.cloudberry.zion.model.datastore.IDataConn
 import play.api.Logger
-import play.api.libs.json.{JsObject, JsString, JsValue, Json}
+import play.api.libs.json._
 import play.api.libs.ws.{WSClient, WSResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -15,32 +15,48 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   override def defaultQueryResponse: JsValue = defaultEmptyResponse
 
   def postQuery(query: String): Future[JsValue] = {
-    postWithCheckingStatus(query, (ws: WSResponse) => {
-      ws.json.asInstanceOf[JsObject].value("results")
-    }, (ws: WSResponse) => defaultQueryResponse)
+    postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
   }
 
   def postControl(query: String): Future[Boolean] = {
-    postWithCheckingStatus(query, (ws: WSResponse) => true, (ws: WSResponse) => false)
+    postWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
   }
 
-  protected def postWithCheckingStatus[T](query: String, succeedHandler: WSResponse => T, failureHandler: WSResponse => T): Future[T] = {
+  protected def postWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
     post(query).map { wsResponse =>
       if (wsResponse.status == 200) {
         println("Query succeeded")
-        Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
-        succeedHandler(wsResponse)
+//        Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
+        succeedHandler(wsResponse, query)
       }
       else {
-        Logger.error("Query failed: " + Json.prettyPrint(wsResponse.json))
+        Logger.info("Query failed: " + Json.prettyPrint(wsResponse.json))
         failureHandler(wsResponse)
       }
     }
   }
 
   def post(query: String): Future[WSResponse] = {
-    Logger.debug("Query:" + query)
-    val f = wSClient.url(url + "/berry.meta").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(query)
+    var jsonQuery = Json.parse(query).as[JsObject]
+    var method = (jsonQuery \ "method").get.toString().stripPrefix("\"").stripSuffix("\"")
+    var dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
+    val queryURL = url + "/" + dataset
+    val filterPath = "?filter_path=hits.hits._source"
+
+    jsonQuery -= "method"
+    jsonQuery -= "dataset"
+
+    Logger.debug("Query: " + query)
+    Logger.debug("method: " + method)
+    Logger.debug("dataset: " + dataset)
+
+    var f = method match {
+      case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
+      case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery);
+      case "update" => ???
+      case "delete" => ???
+      case _ => {println("NO MATCH METHOD"); ???}
+    }
     f.onFailure(wsFailureHandler(query))
     f
   }
@@ -50,9 +66,15 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
       throw e
   }
 
-//  protected def params(query: String): Map[String, Seq[String]] = {
-//
-//  }
+  protected def parseResponse(response: JsValue, query: String): JsValue = {
+    val sourceArray = (response.asInstanceOf[JsObject] \ "hits" \ "hits").get.as[Seq[JsObject]]
+    println("response: " + response)
+    println("sourceArray: " + sourceArray)
+
+    val returnArray = sourceArray.map(doc => doc.value("_source"))
+//    println("return array: " + Json.toJson(returnArray))
+    Json.toJson(returnArray)
+  }
 }
 
 object ElasticsearchConn {

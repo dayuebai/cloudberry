@@ -63,7 +63,10 @@ private[db] class Migration_20160814() {
              |      "stats.lastReadTime": { "type" : "date", "format": "strict_date_time" }
              |    }
              |  }
-             |}}
+             |},
+             |"method": "create",
+             |"dataset": "berry.meta"
+             |}
            """.stripMargin
         }
     }
