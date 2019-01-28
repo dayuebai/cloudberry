@@ -37,7 +37,7 @@ class ElasticsearchGenerator extends IQLGenerator {
       case q: Query => parseQuery(q, temporalSchemaMap)
 //      case q: CreateView => parseCreate(q, temporalSchemaMap)
 //      case q: AppendView => parseAppend(q, temporalSchemaMap)
-//      case q: UpsertRecord => parseUpsert(q, schemaMap)
+      case q: UpsertRecord => parseUpsert(q, schemaMap)
 //      case q: DropView => parseDrop(q, schemaMap)
 //      case q: DeleteRecord => parseDelete(q, schemaMap)
       case _ => ???
@@ -56,7 +56,7 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
     println("Call parseQuery")
-    println("Query: " + query)
+    println("parseQuery query: " + query)
     var queryBuilder = Json.obj()
 
     val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
@@ -108,31 +108,34 @@ class ElasticsearchGenerator extends IQLGenerator {
 //    println("append: " + append)
 //    return ""
 //  }
-//
-//  def parseUpsert(q: UpsertRecord, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Call parseUpsert")
-//    var queryBuilder = Json.arr()
-//    var schema = schemaMap(q.dataset)
-//    var primaryKeyList = schema.getPrimaryKey
-//
-//    for (record <- q.records.as[List[JsValue]]) {
-//      val idBuilder = new StringBuilder()
-//      var docBuilder = Json.obj()
-//      // Assume primary key is not a subfield of JSON data
-//      for (field <- primaryKeyList) {
-//        val id = (record \ (field.name)).get.toString()
-//        idBuilder.append(id)
-//      }
-//      println("id: " + idBuilder.toString)
-//      queryBuilder = queryBuilder :+ Json.obj(("update" -> Json.obj("_id" -> Json.parse(idBuilder.toString))))
-//      docBuilder += ("doc" -> record)
-//      docBuilder += ("doc_as_upsert" -> JsBoolean(true))
-//      queryBuilder = queryBuilder :+ docBuilder
-//    }
-//    println("queryBuilder: " + queryBuilder.toString())
-//    queryBuilder.toString()
-//  }
-//
+
+  def parseUpsert(q: UpsertRecord, schemaMap: Map[String, AbstractSchema]): String = {
+    println("Call parseUpsert")
+    var queryBuilder = Json.obj()
+    var recordBuilder = Json.arr()
+    val schema = schemaMap(q.dataset)
+    val primaryKeyList = schema.getPrimaryKey
+
+    for (record <- q.records.as[List[JsValue]]) {
+      val idBuilder = new StringBuilder()
+      var docBuilder = Json.obj()
+      // Assume primary key is not a subfield of JSON data
+      for (field <- primaryKeyList) {
+        val id = (record \ (field.name)).get.toString()
+        idBuilder.append(id)
+      }
+      // println("id: " + idBuilder.toString)
+      recordBuilder = recordBuilder :+ Json.obj(("update" -> Json.obj("_id" -> Json.parse(idBuilder.toString))))
+      docBuilder += ("doc" -> record)
+      docBuilder += ("doc_as_upsert" -> JsBoolean(true))
+      recordBuilder = recordBuilder :+ docBuilder
+    }
+    queryBuilder += ("method" -> JsString("upsert"))
+    queryBuilder += ("dataset" -> JsString(q.dataset))
+    queryBuilder += ("records" -> recordBuilder)
+    queryBuilder.toString()
+  }
+
 //  protected def parseDrop(query: DropView, schemaMap: Map[String, AbstractSchema]): String = {
 //    println("Call parseDrop")
 //    return ""

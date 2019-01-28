@@ -26,7 +26,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     post(query).map { wsResponse =>
       if (wsResponse.status == 200) {
         println("Query succeeded")
-//        Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
+        // Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
         succeedHandler(wsResponse, query)
       }
       else {
@@ -38,8 +38,8 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
   def post(query: String): Future[WSResponse] = {
     var jsonQuery = Json.parse(query).as[JsObject]
-    var method = (jsonQuery \ "method").get.toString().stripPrefix("\"").stripSuffix("\"")
-    var dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
+    val method = (jsonQuery \ "method").get.toString().stripPrefix("\"").stripSuffix("\"")
+    val dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
     val queryURL = url + "/" + dataset
     val filterPath = "?filter_path=hits.hits._source"
 
@@ -50,11 +50,14 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     Logger.debug("method: " + method)
     Logger.debug("dataset: " + dataset)
 
-    var f = method match {
+    val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
-      case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery);
-      case "update" => ???
+      case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
       case "delete" => ???
+      case "upsert" => {
+        val records = (jsonQuery \ "records").get.as[List[JsValue]].mkString("", "\n", "\n")
+        wSClient.url(queryURL + "/_doc" + "/_bulk").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(records)
+      }
       case _ => {println("NO MATCH METHOD"); ???}
     }
     f.onFailure(wsFailureHandler(query))
@@ -67,13 +70,16 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
   protected def parseResponse(response: JsValue, query: String): JsValue = {
-    val sourceArray = (response.asInstanceOf[JsObject] \ "hits" \ "hits").get.as[Seq[JsObject]]
-    println("response: " + response)
-    println("sourceArray: " + sourceArray)
+    val sourceJsValue = (response.asInstanceOf[JsObject] \ "hits" \ "hits").getOrElse(JsNull)
+    if (sourceJsValue != JsNull) {
+      val sourceArray = sourceJsValue.as[Seq[JsObject]]
+//      println("response: " + response)
+//      println("sourceArray: " + sourceArray)
 
-    val returnArray = sourceArray.map(doc => doc.value("_source"))
-//    println("return array: " + Json.toJson(returnArray))
-    Json.toJson(returnArray)
+      val returnArray = sourceArray.map(doc => doc.value("_source"))
+      Json.toJson(returnArray)
+    }
+    Json.arr()
   }
 }
 
