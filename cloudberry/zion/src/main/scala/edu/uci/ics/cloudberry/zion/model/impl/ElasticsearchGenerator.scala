@@ -9,6 +9,73 @@ import play.api.libs.json._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+/**
+  * Defines constant strings for query languages supported by AsterixDB
+  */
+trait ElasticImpl {
+
+  val aggregateFuncMap: Map[AggregateFunc, String]
+
+  def getAggregateStr(aggregate: AggregateFunc): String = {
+    aggregateFuncMap.get(aggregate) match {
+      case Some(impl) => impl
+      case None => throw new QueryParsingException(s"No implementation is provided for aggregate function ${aggregate.name}")
+    }
+  }
+//
+//  val datetime: String
+//  val round: String
+//
+//  val dayTimeDuration: String
+//  val yearMonthDuration: String
+//  val getIntervalStartDatetime: String
+//  val intervalBin: String
+//
+//  val spatialIntersect: String
+//  val createRectangle: String
+//  val createPoint: String
+//  val spatialCell: String
+//  val getPoints: String
+//
+//
+//  val similarityJaccard: String
+//  val fullTextContains: String
+//  val contains: String
+//  val wordTokens: String
+
+}
+
+object ElasticImpl extends ElasticImpl {
+  val aggregateFuncMap: Map[AggregateFunc, String] = Map(
+    Count -> "count",
+    Max -> "max",
+    Min -> "min",
+    Avg -> "avg",
+    Sum -> "sum"
+    // implement distinct_count, topK later
+  )
+
+//  val datetime: String = "datetime"
+//  val round: String = "round"
+//
+//  val dayTimeDuration: String = "day_time_duration"
+//  val yearMonthDuration: String = "year_month_duration"
+//  val getIntervalStartDatetime: String = "get_interval_start_datetime"
+//  val intervalBin: String = "interval_bin"
+//
+//  val spatialIntersect: String = "spatial_intersect"
+//  val createRectangle: String = "create_rectangle"
+//  val createPoint: String = "create_point"
+//  val spatialCell: String = "spatial_cell"
+//  val getPoints: String = "get_points"
+//
+//  val similarityJaccard: String = "similarity_jaccard"
+//  val fullTextContains: String = "ftcontains"
+//  val contains: String = "contains"
+//  val wordTokens: String = "word_tokens"
+}
+
+
 class ElasticsearchGenerator extends IQLGenerator {
 
   /**
@@ -29,6 +96,8 @@ class ElasticsearchGenerator extends IQLGenerator {
   case class ParsedResult(strs: Seq[String], exprMap: Map[String, FieldExpr])
 
   protected val allFieldVar: String = "*"
+
+  protected val typeImpl: ElasticImpl = ElasticImpl
 
   def generate(query: IQuery, schemaMap: Map[String, AbstractSchema]): String = {
     println("Start to generate query: " + query);
@@ -281,12 +350,12 @@ class ElasticsearchGenerator extends IQLGenerator {
           parseProject(newExprMap)
         }
 
-        if (!projectStr.isEmpty()) {
-          println("projectStr is not empty")
-        }
-        shallowQueryAfterGroup += ("sort" -> Json.parse(orderStr))
-        shallowQueryAfterGroup += ("size" -> JsNumber(limit))
-        shallowQueryAfterGroup += ("from" -> JsNumber(offset))
+        if (!orderStr.isEmpty())
+          shallowQueryAfterGroup += ("sort" -> Json.parse(orderStr))
+        if (limit != None)
+          shallowQueryAfterGroup += ("size" -> JsNumber(limit))
+        if (offset != None)
+          shallowQueryAfterGroup += ("from" -> JsNumber(offset))
 
         (ParsedResult(Seq.empty, newExprMap), shallowQueryAfterGroup)
 
@@ -298,46 +367,47 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseProject(exprMap: Map[String, FieldExpr]): String = {
-    return ""
+    ""
   }
 
   private def parseGlobalAggr(globalAggrOpt: Option[GlobalAggregateStatement],
                               exprMap: Map[String, FieldExpr], query: Query,
                               queryAfterSelect: JsObject): (ParsedResult, JsObject) = {
     var shallowQueryAfterSelect = queryAfterSelect
-//    globalAggrOpt match {
-//      case Some(globalAggr) =>
-//        val aggr = globalAggr.aggregate
-//        val field = aggr.field.name
-//        val funcName = aggr.func match {
-//          case Count => {
+    globalAggrOpt match {
+      case Some(globalAggr) =>
+        val aggr = globalAggr.aggregate
+        val field = aggr.field.name
+        val as = aggr.as.name
+        val funcName = typeImpl.getAggregateStr(aggr.func)
+        globalAggr.aggregate.func match {
+          case Count => {
 //            result -= "method"
 //            if (query.hasGroup)
 //              result += ("method" -> JsString("global count with group"))
 //            else
 //              result += ("method" -> JsString("global count without group"))
-//          }
-//          case Min => {
-//            result -= "method"
-//            result += ("method" -> JsString("min"))
-//            result += ("size" -> JsNumber(0))
-//            result += ("aggs" -> Json.obj("min" -> Json.obj("min" -> Json.obj("field" -> JsString(field)))))
-//          }
-//          case Max => {
-//            result -= "method"
-//            result += ("method" -> JsString("max"))
-//            result += ("size" -> JsNumber(0))
-//            result += ("aggs" -> Json.obj("max" -> Json.obj("max" -> Json.obj("field" -> JsString(field)))))
-//          }
-//          case _ => {
-//            println("aggregation function still not implemented")
-//          }
-//        }
-//
-//        (ParsedResult(Seq.empty, exprMap), result)
-//      case None =>
-//        (ParsedResult(Seq.empty, exprMap), result)
-//    }
+              ???
+          }
+          case Min | Max => {
+            shallowQueryAfterSelect += ("aggregation" -> JsString(funcName))
+            shallowQueryAfterSelect += ("size" -> JsNumber(0))
+            shallowQueryAfterSelect += ("aggs" -> Json.obj( as -> Json.obj(funcName -> Json.obj("field" -> JsString(field)))))
+          }
+          // TODO
+          case Sum => ???
+
+          case Avg => ???
+
+          case DistinctCount => ???
+
+          case topK => ???
+        }
+
+        (ParsedResult(Seq.empty, exprMap), shallowQueryAfterSelect)
+      case None =>
+        (ParsedResult(Seq.empty, exprMap), shallowQueryAfterSelect)
+    }
     (ParsedResult(Seq.empty, exprMap), shallowQueryAfterSelect)
   }
 

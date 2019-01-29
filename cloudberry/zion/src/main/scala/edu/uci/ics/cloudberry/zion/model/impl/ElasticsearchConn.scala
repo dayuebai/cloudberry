@@ -40,15 +40,25 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     var jsonQuery = Json.parse(query).as[JsObject]
     val method = (jsonQuery \ "method").get.toString().stripPrefix("\"").stripSuffix("\"")
     val dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
+    val jsonAggregation = (jsonQuery \ "aggregation").getOrElse(JsNull)
+    val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
     val queryURL = url + "/" + dataset
-    val filterPath = "?filter_path=hits.hits._source"
+    val filterPath = aggregation match {
+      case "" => "?filter_path=hits.hits._source"
+      case "min" => "?size=0&filter_path=aggregations.min.value_as_string"
+      case "max" => "?size=0&filter_path=aggregations.max.value_as_string"
+      case _ => ???
+    }
 
     jsonQuery -= "method"
     jsonQuery -= "dataset"
+    jsonQuery -= "aggregation"
 
-    Logger.debug("Query: " + query)
-    Logger.debug("method: " + method)
-    Logger.debug("dataset: " + dataset)
+    Logger.info("Query: " + query)
+    Logger.info("method: " + method)
+    Logger.info("dataset: " + dataset)
+    Logger.info("aggregation: " + aggregation)
+    Logger.info("jsonQuery: " + jsonQuery.toString())
 
     val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
@@ -70,16 +80,36 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
   protected def parseResponse(response: JsValue, query: String): JsValue = {
-    val sourceJsValue = (response.asInstanceOf[JsObject] \ "hits" \ "hits").getOrElse(JsNull)
-    if (sourceJsValue != JsNull) {
-      val sourceArray = sourceJsValue.as[Seq[JsObject]]
-//      println("response: " + response)
-//      println("sourceArray: " + sourceArray)
+    var jsonQuery = Json.parse(query).as[JsObject]
+    val jsonAggregation = (jsonQuery \ "aggregation").getOrElse(JsNull)
+    val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
+    aggregation match {
+      case "" => {
+        val sourceJsValue = (response.asInstanceOf[JsObject] \ "hits" \ "hits").getOrElse(JsNull)
+        if (sourceJsValue != JsNull) {
+          val sourceArray = sourceJsValue.as[Seq[JsObject]]
+          //      println("response: " + response)
+          //      println("sourceArray: " + sourceArray)
 
-      val returnArray = sourceArray.map(doc => doc.value("_source"))
-      Json.toJson(returnArray)
+          val returnArray = sourceArray.map(doc => doc.value("_source"))
+          Json.toJson(returnArray)
+        }
+        Json.arr()
+      }
+      case "min" => {
+        val min = (response.asInstanceOf[JsObject] \ "aggregations" \ "min" \ "value_as_string").get.as[JsString]
+        val jsonObjMin = Json.obj(("min" -> min))
+//        println("min reuturn: " + Json.arr(jsonObjMin))
+        Json.arr(jsonObjMin)
+      }
+      case "max" => {
+        val max = (response.asInstanceOf[JsObject] \ "aggregations" \ "max" \ "value_as_string").get.as[JsString]
+        val jsonObjMax = Json.obj(("max" -> max))
+//        println("max return: " + Json.arr(jsonObjMax))
+        Json.arr(jsonObjMax)
+      }
+      case _ => ???
     }
-    Json.arr()
   }
 }
 
