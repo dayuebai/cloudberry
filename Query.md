@@ -190,3 +190,17 @@ curl -X POST "localhost:9200/twitter.ds_tweet/_search?size=0&filter_path=aggrega
 }
 '
 ```
+
+# Query 5 (keyword search)
+
+AsterixDB:
+
+```aidl
+
+```
+
+Elasticsearch:
+
+```aidl
+
+```

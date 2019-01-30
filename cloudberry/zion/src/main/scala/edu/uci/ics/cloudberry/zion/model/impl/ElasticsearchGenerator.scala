@@ -229,18 +229,20 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseFilter(filters: Seq[FilterStatement], exprMap: Map[String, FieldExpr], unnestTestStrs: Seq[String], queryAfterUnnest: JsObject): (ParsedResult, JsObject) = {
+    var shallowQueryAfterUnnest = queryAfterUnnest
+
     if (filters.isEmpty && unnestTestStrs.isEmpty) {
-      (ParsedResult(Seq.empty, exprMap), queryAfterUnnest)
+      (ParsedResult(Seq.empty, exprMap), shallowQueryAfterUnnest)
     } else {
-//      val filterStrs = filters.map { filter =>
-//        parseFilterRelation(filter, exprMap(filter.field.name).refExpr)
-//      }
-//      val filterStr = (unnestTestStrs ++ filterStrs).mkString("""{"must": [""", ",", "]}")
+      val filterStrs = filters.map { filter =>
+        parseFilterRelation(filter, exprMap(filter.field.name).refExpr)
+      }
+      val filterStr = (unnestTestStrs ++ filterStrs).mkString("""{"must": [""", ",", "]}")
 //      println("filterStr: " + filterStr)
-//
-//      result += ("query" -> Json.obj("bool" -> Json.parse(filterStr)))
-//      println("result after parse filter: " + result)
-      (ParsedResult(Seq.empty, exprMap), queryAfterUnnest)
+
+      shallowQueryAfterUnnest += ("query" -> Json.obj("bool" -> Json.parse(filterStr)))
+//      println("result after parse filter: " + shallowQueryAfterUnnest)
+      (ParsedResult(Seq.empty, exprMap), shallowQueryAfterUnnest)
     }
   }
 
@@ -380,17 +382,16 @@ class ElasticsearchGenerator extends IQLGenerator {
         val field = aggr.field.name
         val as = aggr.as.name
         val funcName = typeImpl.getAggregateStr(aggr.func)
+        val aggregatedJson = Json.parse(s"""{"func": "$funcName", "as": "$as"}""")
         globalAggr.aggregate.func match {
           case Count => {
-//            result -= "method"
-//            if (query.hasGroup)
-//              result += ("method" -> JsString("global count with group"))
-//            else
-//              result += ("method" -> JsString("global count without group"))
-              ???
+            shallowQueryAfterSelect += {"aggregation" -> aggregatedJson}
+            if (field != "*") {
+              shallowQueryAfterSelect += ("_source" -> JsString(field))
+            }
           }
           case Min | Max => {
-            shallowQueryAfterSelect += ("aggregation" -> JsString(funcName))
+            shallowQueryAfterSelect += ("aggregation" -> aggregatedJson)
             shallowQueryAfterSelect += ("size" -> JsNumber(0))
             shallowQueryAfterSelect += ("aggs" -> Json.obj( as -> Json.obj(funcName -> Json.obj("field" -> JsString(field)))))
           }
@@ -425,36 +426,38 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-//  protected def parseFilterRelation(filter: FilterStatement, fieldExpr: String): String = {
-//    if ((filter.relation == Relation.isNull || filter.relation == Relation.isNotNull) &&
-//        filter.field.dataType != DataType.Bag && filter.field.dataType != DataType.Hierarchy) {
+  protected def parseFilterRelation(filter: FilterStatement, fieldExpr: String): String = {
+    if ((filter.relation == Relation.isNull || filter.relation == Relation.isNotNull) &&
+        filter.field.dataType != DataType.Bag && filter.field.dataType != DataType.Hierarchy) {
 //      if (filter.relation == Relation.isNull)
 //        s"$fieldExpr is unknown"
 //      else
 //        s"$fieldExpr is not unknown"
-//    }
-//    else {
-//      filter.field.dataType match {
-//        case DataType.Number =>
+      ""
+    }
+    else {
+      filter.field.dataType match {
+        case DataType.Number => ???
 //          parseNumberRelation(filter, fieldExpr)
-//        case DataType.Time =>
-//          parseTimeRelation(filter, fieldExpr)
-//        case DataType.Point =>
+        case DataType.Time =>
+          parseTimeRelation(filter, fieldExpr)
+        case DataType.Point => ???
 //          parsePointRelation(filter, fieldExpr)
-//        case DataType.Boolean => ???
-//        case DataType.String => parseStringRelation(filter, fieldExpr)
-//        case DataType.Text =>
+        case DataType.Boolean => ???
+        case DataType.String => ???
+//          parseStringRelation(filter, fieldExpr)
+        case DataType.Text => ???
 //          parseTextRelation(filter, fieldExpr)
-//        case DataType.Bag => ???
-//        case DataType.Hierarchy =>
-//          throw new QueryParsingException("the Hierarchy type doesn't support any relations.")
-//        case _ => throw new QueryParsingException(s"unknown datatype: ${
-//          filter.field.dataType
-//        }")
-//      }
-//    }
-//  }
-//
+        case DataType.Bag => ???
+        case DataType.Hierarchy =>
+          throw new QueryParsingException("the Hierarchy type doesn't support any relations.")
+        case _ => throw new QueryParsingException(s"unknown datatype: ${
+          filter.field.dataType
+        }")
+      }
+    }
+  }
+
 //  protected def parseNumberRelation(filter: FilterStatement, fieldExpr: String): String = {
 //    filter.relation match {
 //      case Relation.inRange =>
@@ -473,28 +476,28 @@ class ElasticsearchGenerator extends IQLGenerator {
 //      case _ => throw new QueryParsingException("no supported parameter for this number in Elasticsearch")
 //    }
 //  }
-//
-//  protected def parseTimeRelation(filter: FilterStatement, fieldExpr: String): String = {
-//    filter.relation match {
-//      case Relation.inRange => {
-//        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "lt": "${filter.values(1)}"}}}""".stripMargin
-//      }
-//      case Relation.< => {
-//        s"""{"range": {"$fieldExpr": {"lt": "${filter.values(0)}"}}}""".stripMargin
-//      }
-//      case Relation.> => {
-//        s"""{"range": {"$fieldExpr": {"gt": "${filter.values(0)}"}}}""".stripMargin
-//      }
-//      case Relation.<= => {
-//        s"""{"range": {"$fieldExpr": {"lte": "${filter.values(0)}"}}}""".stripMargin
-//      }
-//      case Relation.>= => {
-//        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}"}}}""".stripMargin
-//      }
-//      case _ => throw new QueryParsingException("no supported parameter for this date in Elasticsearch")
-//    }
-//  }
-//
+
+  protected def parseTimeRelation(filter: FilterStatement, fieldExpr: String): String = {
+    filter.relation match {
+      case Relation.inRange => {
+        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "lt": "${filter.values(1)}", "format": "strict_date_time" }}}""".stripMargin
+      }
+      case Relation.< => {
+        s"""{"range": {"$fieldExpr": {"lt": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
+      }
+      case Relation.> => {
+        s"""{"range": {"$fieldExpr": {"gt": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
+      }
+      case Relation.<= => {
+        s"""{"range": {"$fieldExpr": {"lte": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
+      }
+      case Relation.>= => {
+        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
+      }
+      case _ => throw new QueryParsingException("no supported parameter for this date in Elasticsearch")
+    }
+  }
+
 //  protected def parsePointRelation(filter: FilterStatement, fieldExpr: String): String = {
 //    ""
 //  }

@@ -40,13 +40,19 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     var jsonQuery = Json.parse(query).as[JsObject]
     val method = (jsonQuery \ "method").get.toString().stripPrefix("\"").stripSuffix("\"")
     val dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
-    val jsonAggregation = (jsonQuery \ "aggregation").getOrElse(JsNull)
+    val jsonAggregation = (jsonQuery \ "aggregation" \ "func").getOrElse(JsNull)
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
+
     val queryURL = url + "/" + dataset
     val filterPath = aggregation match {
       case "" => "?filter_path=hits.hits._source"
-      case "min" => "?size=0&filter_path=aggregations.min.value_as_string"
-      case "max" => "?size=0&filter_path=aggregations.max.value_as_string"
+      case "count" => "?filter_path=hits.total"
+      case "min" | "max" => {
+        val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
+        println(s"""?size=0&filter_path=aggregations.$asField.value_as_string""")
+        s"""?size=0&filter_path=aggregations.$asField.value_as_string"""
+      }
+
       case _ => ???
     }
 
@@ -80,8 +86,8 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
   protected def parseResponse(response: JsValue, query: String): JsValue = {
-    var jsonQuery = Json.parse(query).as[JsObject]
-    val jsonAggregation = (jsonQuery \ "aggregation").getOrElse(JsNull)
+    val jsonQuery = Json.parse(query).as[JsObject]
+    val jsonAggregation = (jsonQuery \ "aggregation" \ "func").getOrElse(JsNull)
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
     aggregation match {
       case "" => {
@@ -96,17 +102,18 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         }
         Json.arr()
       }
-      case "min" => {
-        val min = (response.asInstanceOf[JsObject] \ "aggregations" \ "min" \ "value_as_string").get.as[JsString]
-        val jsonObjMin = Json.obj(("min" -> min))
-//        println("min reuturn: " + Json.arr(jsonObjMin))
-        Json.arr(jsonObjMin)
+      case "count" => {
+        val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
+        val count = (response.asInstanceOf[JsObject] \ "hits" \ "total").get.as[JsNumber]
+        println(Json.arr(Json.obj(asField -> count)))
+        Json.arr(Json.obj(asField -> count))
       }
-      case "max" => {
-        val max = (response.asInstanceOf[JsObject] \ "aggregations" \ "max" \ "value_as_string").get.as[JsString]
-        val jsonObjMax = Json.obj(("max" -> max))
-//        println("max return: " + Json.arr(jsonObjMax))
-        Json.arr(jsonObjMax)
+      case "min" | "max" => {
+        val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
+        val res = (response.asInstanceOf[JsObject] \ "aggregations" \ asField \ "value_as_string").get.as[JsString]
+        val jsonObjRes = Json.obj(asField -> res)
+        println(s"$asField return: " + Json.arr(jsonObjRes))
+        Json.arr(jsonObjRes)
       }
       case _ => ???
     }
