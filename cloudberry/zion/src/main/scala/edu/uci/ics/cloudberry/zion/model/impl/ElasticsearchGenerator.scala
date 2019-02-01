@@ -260,7 +260,7 @@ class ElasticsearchGenerator extends IQLGenerator {
 //        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
         val groupStr = new mutable.StringBuilder()
         var groupAsArray = Json.arr()
-        val aggregateArray = Json.arr()
+//        val aggregateArray = Json.arr()
 
         for (i <- group.bys.indices) {
           val by = group.bys(i)
@@ -308,7 +308,9 @@ class ElasticsearchGenerator extends IQLGenerator {
 //          val aggregatedJson = Json.parse(s"""{"func": "$funcName", "as": "$as"}""")
 //          aggregateArray.append(aggregatedJson)
 //        }
-//        if (!group.lookups.isEmpty) {
+        if (!group.lookups.isEmpty) {
+          shallowQueryAfterAppend += ("join" -> JsBoolean(true))
+        }
 //          //we need to update producedExprs
 //          val producedExprMap = producedExprs.result().toMap
 //          val newExprMap =

@@ -207,7 +207,6 @@ Elasticsearch:
 curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: application/json' -d'
 {   
     "size": 0,
-    "_source": ["id", "state", "day", "text", "geo_tag.stateID"],
     "query": {
         "bool": {
             "must": [

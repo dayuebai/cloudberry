@@ -45,20 +45,21 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
     val queryURL = url + "/" + dataset
     val filterPath = aggregation match {
-      case "" => "?filter_path=hits.hits._source"
+      case "" => if ((jsonQuery \ "groupAsList").getOrElse(JsNull) == JsNull) "?filter_path=hits.hits._source" else "?filter_path=aggregations"
       case "count" => "?filter_path=hits.total"
       case "min" | "max" => {
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
         println(s"""?size=0&filter_path=aggregations.$asField.value_as_string""")
         s"""?size=0&filter_path=aggregations.$asField.value_as_string"""
       }
-
       case _ => ???
     }
 
     jsonQuery -= "method"
     jsonQuery -= "dataset"
     jsonQuery -= "aggregation"
+    jsonQuery -= "groupAsList"
+    jsonQuery -= "join"
 
     Logger.info("Query: " + query)
     Logger.info("method: " + method)
@@ -89,6 +90,40 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val jsonQuery = Json.parse(query).as[JsObject]
     val jsonAggregation = (jsonQuery \ "aggregation" \ "func").getOrElse(JsNull)
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
+    val jsonGroupAsList = (jsonQuery \ "groupAsList").getOrElse(JsNull)
+
+    if (jsonGroupAsList != JsNull) {
+      var resArray = Json.arr()
+      val groupAsList = jsonGroupAsList.as[Seq[String]]
+      println("response for parseResponse" + response)
+      println("group As List: " + groupAsList)
+      val buckets: Seq[JsValue] = (response \ "aggregations" \ groupAsList.head \ "buckets").get.as[Seq[JsValue]]
+      for (bucket <- buckets) {
+        val keyValue = (bucket \ "key").get.as[Int]
+        if ((jsonQuery \ "join").getOrElse(JsNull) == JsNull) {
+          val liquid: Seq[JsValue] = (bucket \ groupAsList.last \ "buckets").get.as[Seq[JsValue]]
+          for (drop <- liquid) {
+            var tmp_json = Json.obj()
+            tmp_json += (groupAsList.head -> JsNumber(keyValue))
+            tmp_json += (groupAsList.last -> JsString((drop \ "key_as_string").get.as[String]))
+            tmp_json += ("count" -> JsNumber((drop \ "doc_count").get.as[Int]))
+            resArray = resArray.append(tmp_json)
+          }
+        }
+        else {
+          val docCount = (bucket \ "doc_count").get.as[Int]
+          var jsonObj = Json.obj()
+          jsonObj += (groupAsList.head -> JsNumber(keyValue))
+          jsonObj += ("count" -> JsNumber(docCount))
+          // Assume population is now TODO: implement join query
+          jsonObj += ("population" -> JsNumber(1))
+          resArray = resArray.append(jsonObj)
+        }
+      }
+      println("retArray is: " + resArray)
+      return resArray
+    }
+
     aggregation match {
       case "" => {
         val sourceJsValue = (response.asInstanceOf[JsObject] \ "hits" \ "hits").getOrElse(JsNull)
