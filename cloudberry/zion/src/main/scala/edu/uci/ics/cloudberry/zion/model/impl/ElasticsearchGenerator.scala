@@ -253,56 +253,79 @@ class ElasticsearchGenerator extends IQLGenerator {
   private def parseGroupby(groupOpt: Option[GroupStatement],
                            exprMap: Map[String, FieldExpr],
                            queryAfterAppend: JsObject): (ParsedResult, JsObject) = {
-//    (ParsedResult(Seq.empty, exprMap), queryAfterAppend)
-
     var shallowQueryAfterAppend = queryAfterAppend
     groupOpt match {
       case Some(group) =>
         shallowQueryAfterAppend += ("size" -> JsNumber(0))
-        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
-        var groupStr = new mutable.StringBuilder()
-
-        var counter = 0
+//        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
+        val groupStr = new mutable.StringBuilder()
+        var groupAsArray = Json.arr()
+        val aggregateArray = Json.arr()
 
         for (i <- group.bys.indices) {
-          var by = group.bys(i)
+          val by = group.bys(i)
           val as = by.as.getOrElse(by.field).name
-          val fieldExpr = exprMap(by.field.name).refExpr
-
-          groupStr.append(s"""{"group_by": {""")
-          shallowQueryAfterAppend += ("aggr" -> JsString(as))
-
+//          val fieldExpr = exprMap(by.field.name).refExpr
+          groupAsArray = groupAsArray.append(JsString(as))
+          if (i == 0)
+            groupStr.append(s"""{"$as": {""")
           else
-            groupStr.append(s""","aggs": {"sub_group_by": {""")
+            groupStr.append(s""","aggs": {"$as": {""")
 
           by.funcOpt match {
             case Some(func) =>
               func match {
                 case bin: Bin => ???
-                case interval: Interval =>
+                case interval: Interval => // assume has time field
                   val duration = parseIntervalDuration(interval)
-                  groupStr.append(s""" "date_histogram": {"field": "$fieldExpr", "interval": "$duration", "min_doc_count": 1} """.stripMargin)
+                  groupStr.append(s""" "date_histogram": {"field": "${by.field.name}", "interval": "$duration", "min_doc_count": 1} """.stripMargin)
                 case level: Level =>
                   val hierarchyField = by.field.asInstanceOf[HierarchyField]
                   val field = hierarchyField.levels.find(_._1 == level.levelTag).get._2
-                  println("Hierarchy inner field name: " + field)
-                  groupStr.append(s""" "terms": {"field": "${field}", "size": 30000, "min_doc_count": 1} """.stripMargin)
+                  groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "min_doc_count": 1} """.stripMargin)
                 case GeoCellTenth => ???
                 case GeoCellHundredth => ???
-                case _ => throw new QueryParsingException(s"unknow function: ${func.name}")
+                case _ => throw new QueryParsingException(s"unknown function: ${func.name}")
               }
             case None => ???
           }
-
-          counter += 1
         }
-        groupStr.append("}" * (counter * 2))
-        println("groupStr: " + groupStr)
-        result += ("aggs" -> Json.parse(groupStr.toString))
+        groupStr.append("}" * group.bys.length * 2)
+//        println("groupStr: " + groupStr)
+        shallowQueryAfterAppend += ("aggs" -> Json.parse(groupStr.toString))
+        shallowQueryAfterAppend += ("groupAsList" -> groupAsArray)
 
-        (ParsedResult(Seq.empty, exprMap), result)
+//        group.aggregates.foreach { aggr =>
+//          val fieldExpr = exprMap(aggr.field.name)
+//          //def
+//          val aggrExpr = parseAggregateFunc(aggr, fieldExpr.refExpr)
+//          //ref
+//          val newExpr = s"$quote${aggr.as.name}$quote"
+//          producedExprs += aggr.as.name -> FieldExpr(newExpr, aggrExpr)
+//          val field = aggr.field.name
+//          val as = aggr.as.name
+//          val funcName = typeImpl.getAggregateStr(aggr.func)
+//          val aggregatedJson = Json.parse(s"""{"func": "$funcName", "as": "$as"}""")
+//          aggregateArray.append(aggregatedJson)
+//        }
+//        if (!group.lookups.isEmpty) {
+//          //we need to update producedExprs
+//          val producedExprMap = producedExprs.result().toMap
+//          val newExprMap =
+//            producedExprMap.map {
+//              case (field, expr) => field -> FieldExpr(s"$groupedLookupSourceVar.$quote$field$quote", s"$groupedLookupSourceVar.$quote$field$quote")
+//            }
+//          queryBuilder.insert(0, s"from (\n${parseProject(producedExprMap)}\n")
+//          queryBuilder.append(s"\n) $groupedLookupSourceVar\n")
+//          val resultAfterLookup = parseLookup(group.lookups, newExprMap, queryBuilder, true)
+//          ParsedResult(Seq.empty, resultAfterLookup.exprMap)
+//        } else {
+//          ParsedResult(Seq.empty, producedExprs.result().toMap)
+//        }
+
+        (ParsedResult(Seq.empty, exprMap), shallowQueryAfterAppend)
       case None =>
-        (ParsedResult(Seq.empty, exprMap), result)
+        (ParsedResult(Seq.empty, exprMap), shallowQueryAfterAppend)
     }
   }
 
@@ -391,7 +414,7 @@ class ElasticsearchGenerator extends IQLGenerator {
           case Count => {
             shallowQueryAfterSelect += {"aggregation" -> aggregatedJson}
             if (field != "*") {
-              shallowQueryAfterSelect += ("_source" -> JsString(field))
+              shallowQueryAfterSelect += ("_source" -> Json.arr(JsString(field)))
             }
           }
           case Min | Max => {
@@ -502,31 +525,31 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-//  protected def parsePointRelation(filter: FilterStatement, fieldExpr: String): String = {
-//    ""
-//  }
-//
-//  protected def parseStringRelation(filter: FilterStatement, fieldExpr: String): String = {
-//    ""
-//  }
+  protected def parsePointRelation(filter: FilterStatement, fieldExpr: String): String = {
+    ""
+  }
+
+  protected def parseStringRelation(filter: FilterStatement, fieldExpr: String): String = {
+    ""
+  }
 
   protected def parseTextRelation(filter: FilterStatement, fieldExpr: String): String = {
     val words = filter.values.map(w => s"${w.asInstanceOf[String].trim()}").mkString("\"", ",", "\"")
     s"""{"match": {"${fieldExpr}": {"query": $words, "operator": "and"}}}"""
   }
 
-//  protected def parseIntervalDuration(interval: Interval): String = {
-//    import TimeUnit._
-//    interval.unit match {
-//      case Second => "second"
-//      case Minute => "minute"
-//      case Hour => "hour"
-//      case Day => "day"
-//      case Week => "week"
-//      case Month => "month"
-//      case Year => "year"
-//    }
-//  }
+  protected def parseIntervalDuration(interval: Interval): String = {
+    import TimeUnit._
+    interval.unit match {
+      case Second => "second"
+      case Minute => "minute"
+      case Hour => "hour"
+      case Day => "day"
+      case Week => "week"
+      case Month => "month"
+      case Year => "year"
+    }
+  }
 }
 
 object ElasticsearchGenerator extends IQLGeneratorFactory {
