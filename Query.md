@@ -255,3 +255,46 @@ curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: a
     }
 }'
 ```
+
+# Query 6 (create view)
+
+AsterixDB:
+
+```aidl
+create type twitter.typeTweet if not exists as open {
+  place : {   bounding_box : string },
+  favorite_count : double,
+  geo_tag : {   countyID : double },
+  user_mentions : {{double}}?,
+  user : {   id : double },
+  geo_tag : {   cityID : double },
+  is_retweet : boolean,
+  text : string,
+  retweet_count : double,
+  in_reply_to_user : double,
+  id : double,
+  coordinate : point,
+  in_reply_to_status : double,
+  user : {   status_count : double },
+  geo_tag : {   stateID : double },
+  create_at : datetime,
+  lang : string,
+  user : {   profile_image_url : string },
+  user : {   name : string },
+  hashtags : {{string}}?
+};
+    
+drop dataset twitter.ds_tweet_8d8d1437907bca79900ac5f0ea1f5c73 if exists;
+create dataset twitter.ds_tweet_8d8d1437907bca79900ac5f0ea1f5c73(twitter.typeTweet) primary key id; //with filter on 'create_at'
+insert into twitter.ds_tweet_8d8d1437907bca79900ac5f0ea1f5c73 (
+select value t
+from twitter.ds_tweet t
+where t.`create_at` < datetime('2019-02-03T13:48:20.676-0800') and ftcontains(t.`text`, ['north'], {'mode':'all'})
+)
+```
+
+Elasticsearch:
+
+```aidl
+
+```

@@ -104,7 +104,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     val (temporalSchemaMap, lookupSchemaMap) = GeneratorUtil.splitSchemaMap(schemaMap)
     val result = query match {
       case q: Query => parseQuery(q, temporalSchemaMap)
-//      case q: CreateView => parseCreate(q, temporalSchemaMap)
+      case q: CreateView => parseCreate(q, temporalSchemaMap)
 //      case q: AppendView => parseAppend(q, temporalSchemaMap)
       case q: UpsertRecord => parseUpsert(q, schemaMap)
 //      case q: DropView => parseDrop(q, schemaMap)
@@ -121,6 +121,15 @@ class ElasticsearchGenerator extends IQLGenerator {
     } else {
       ???
     }
+  }
+
+  protected def genProperties(schema: AbstractSchema): JsObject = {
+    var properties = Json.obj()
+    schema.fieldMap.values.filter(f => f.dataType == DataType.Time).foreach(
+      f => {properties += (f.name -> Json.parse("""{ "type" : "date", "format": "strict_date_time" }"""))}
+    )
+    println("properties: " + properties)
+    properties
   }
 
   def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
@@ -154,29 +163,33 @@ class ElasticsearchGenerator extends IQLGenerator {
     queryAfterGlobalAggr.toString()
 
   }
-//
-//  def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
-//    println("Call parseCreate")
-//    println("view: " + create)
-//    val sourceSchema = schemaMap(create.query.dataset)
-//    val resultSchema = calcResultSchema(create.query, sourceSchema)
-//    val query =
-//      s"""
-//         |{
-//         |"method": "check drop existence",
-//         |"dataset": "${create.dataset}",
-//         |"query": ${parseQuery(create.query, schemaMap)}
-//         |}
-//      """.stripMargin
-//    println("Insert query: " + query)
-//    query
-//  }
-//
-//  protected def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = {
-//    println("Call parseAppend")
-//    println("append: " + append)
-//    return ""
-//  }
+
+  def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
+    println("Call parseCreate")
+    val dataset = create.dataset
+    val sourceSchema = schemaMap(create.query.dataset)
+    val resultSchema = calcResultSchema(create.query, sourceSchema)
+    val properties = genProperties(resultSchema)
+
+    val dropStatement = Json.parse(
+      s"""{ "method": "drop", "dataset": "$dataset" }"""
+    )
+    val createStatement = Json.parse(
+      s"""{"method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } } }"""
+    )
+    val selectStatement = Json.parse(parseQuery(create.query, schemaMap))
+    val insertStatement = Json.parse(s"""{ "method": "upsert", "dataset": "$dataset" }""")
+
+    val resQueryArray = Json.arr(dropStatement, createStatement, selectStatement, insertStatement)
+    println("resQueryArray: " + resQueryArray)
+    resQueryArray.toString()
+  }
+
+  protected def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = {
+    println("Call parseAppend")
+    println("append: " + append)
+    return ""
+  }
 
   def parseUpsert(q: UpsertRecord, schemaMap: Map[String, AbstractSchema]): String = {
     println("Call parseUpsert")
