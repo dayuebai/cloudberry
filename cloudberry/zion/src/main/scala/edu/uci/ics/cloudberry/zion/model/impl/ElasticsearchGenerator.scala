@@ -125,6 +125,7 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   protected def genProperties(schema: AbstractSchema): JsObject = {
     var properties = Json.obj()
+    // TODO: user.create has time format: strict_date (in Elasticsearch)
     schema.fieldMap.values.filter(f => f.dataType == DataType.Time).foreach(
       f => {properties += (f.name -> Json.parse("""{ "type" : "date", "format": "strict_date_time" }"""))}
     )

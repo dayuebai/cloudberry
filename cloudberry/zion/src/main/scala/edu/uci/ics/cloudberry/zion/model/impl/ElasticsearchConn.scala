@@ -19,12 +19,18 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
   def postControl(query: String): Future[Boolean] = {
-    postWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
+    if (query.startsWith("[")) {
+      multiPostWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
+    }
+    else {
+      postWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
+    }
   }
 
   protected def postWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
     post(query).map { wsResponse =>
-      if (wsResponse.status == 200) {
+      val responseCode = wsResponse.status
+      if (responseCode == 200 || responseCode == 400) {
         println("Query succeeded")
         // Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
         succeedHandler(wsResponse, query)
@@ -33,6 +39,19 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         Logger.info("Query failed: " + Json.prettyPrint(wsResponse.json))
         failureHandler(wsResponse)
       }
+    }
+  }
+
+  def multiPostWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
+    println("CALL multipost")
+    var jsonQuery = Json.parse(query).as[Seq[JsObject]]
+    println("jsonQuery: " + jsonQuery)
+    val headQuery = jsonQuery.head.toString()
+    jsonQuery = jsonQuery.drop(1)
+    println("after drop, jsonquery is: " + jsonQuery)
+    println("headQuery: " + headQuery)
+    post(headQuery).map {
+      wsResponse => succeedHandler(wsResponse, query)
     }
   }
 
