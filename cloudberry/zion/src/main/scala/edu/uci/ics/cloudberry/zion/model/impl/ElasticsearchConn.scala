@@ -7,6 +7,7 @@ import play.api.libs.ws.{WSClient, WSResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.concurrent.Await
 
 class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionContext) extends IDataConn {
 
@@ -20,7 +21,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
   def postControl(query: String): Future[Boolean] = {
     if (query.startsWith("[")) {
-      multiPostWithCheckingStatus(query, (ws: WSResponse) => true, (ws: WSResponse) => false)
+      transactionWithCheckingStatus(query, (ws: WSResponse) => true, (ws: WSResponse) => false)
     }
     else {
       postWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
@@ -42,7 +43,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     }
   }
 
-  def multiPostWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
+  def transactionWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
     println("CALL multipost")
     var jsonQuery = Json.parse(query).as[Seq[JsObject]]
     println("jsonQuery: " + jsonQuery)
@@ -53,14 +54,17 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
       println("headQuery: " + headQuery)
       println("after drop, jsonquery is: " + jsonQuery)
 
-      post(headQuery).map { wsResponse =>
+      val c = post(headQuery).map { wsResponse =>
         val responseCode = wsResponse.status
-        println("multi post Query succeeded, status code: " + responseCode + " query: " + headQuery)
+        println("multi post Query, status code: " + responseCode + " query: " + headQuery)
       }
+      Await.ready(c, Duration.Inf)
     }
-    post(jsonQuery.head.toString()).map { wsResponse =>
+
+    val r = post(jsonQuery.head.toString()).map { wsResponse =>
       val responseCode = wsResponse.status
       if (responseCode == 200) {
+        Logger.info("FINISH TRANSACTION")
         succeedHandler(wsResponse)
       }
       else{
@@ -68,19 +72,28 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         failureHandler(wsResponse)
       }
     }
+    Await.ready(r, Duration.Inf)
   }
 
   def post(query: String): Future[WSResponse] = {
     var jsonQuery = Json.parse(query).as[JsObject]
     val method = (jsonQuery \ "method").get.toString().stripPrefix("\"").stripSuffix("\"")
-    val dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
     val jsonAggregation = (jsonQuery \ "aggregation" \ "func").getOrElse(JsNull)
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
+    var dataset = ""
+    var queryURL = ""
 
-    val queryURL = url + "/" + dataset
-    val filterPath = ""
+    if (method != "reindex") {
+      dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
+      queryURL = url + "/" + dataset
+    }
+    else {
+      queryURL = url + "/_reindex?refresh"
+    }
+
+    var filterPath = ""
     if (method != "drop" || method != "create") {
-      aggregation match {
+      filterPath = aggregation match {
         case "" => if ((jsonQuery \ "groupAsList").getOrElse(JsNull) == JsNull) "?filter_path=hits.hits._source" else "?filter_path=aggregations"
         case "count" => "?filter_path=hits.total"
         case "min" | "max" => {
@@ -109,9 +122,10 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
       case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
       case "upsert" => {
         val records = (jsonQuery \ "records").get.as[List[JsValue]].mkString("", "\n", "\n")
-        wSClient.url(queryURL + "/_doc" + "/_bulk").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(records)
+        wSClient.url(queryURL + "/_doc" + "/_bulk?refresh").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(records)
       }
       case "drop" => wSClient.url(queryURL).withRequestTimeout(Duration.Inf).delete()
+      case "reindex" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
       case _ => {println("NO MATCH METHOD"); ???}
     }
     f.onFailure(wsFailureHandler(query))
@@ -181,6 +195,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         Json.arr(Json.obj(asField -> count))
       }
       case "min" | "max" => {
+        println("min/max response: " + response)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
         val res = (response.asInstanceOf[JsObject] \ "aggregations" \ asField \ "value_as_string").get.as[JsString]
         val jsonObjRes = Json.obj(asField -> res)
