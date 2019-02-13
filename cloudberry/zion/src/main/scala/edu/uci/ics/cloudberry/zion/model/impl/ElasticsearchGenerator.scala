@@ -178,10 +178,19 @@ class ElasticsearchGenerator extends IQLGenerator {
     val createStatement = Json.parse(
       s"""{"method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } } }"""
     )
-    val selectStatement = Json.parse(parseQuery(create.query, schemaMap))
-    val insertStatement = Json.parse(s"""{ "method": "upsert", "dataset": "$dataset" }""")
+    var selectStatement = Json.parse(parseQuery(create.query, schemaMap)).as[JsObject]
 
-    val resQueryArray = Json.arr(dropStatement, createStatement, selectStatement, insertStatement)
+    var source = Json.obj()
+    source += ("index" -> JsString(create.query.dataset))
+    source += ("query" -> (selectStatement \ "query").get)
+    val dest = Json.parse(s""" { "index": "$dataset" } """)
+
+    var reindexStatement = Json.obj()
+    reindexStatement += ("method" -> JsString("reindex"))
+    reindexStatement += ("source" -> source)
+    reindexStatement += ("dest" -> dest)
+
+    val resQueryArray = Json.arr(dropStatement, createStatement, reindexStatement)
     println("resQueryArray: " + resQueryArray)
     resQueryArray.toString()
   }

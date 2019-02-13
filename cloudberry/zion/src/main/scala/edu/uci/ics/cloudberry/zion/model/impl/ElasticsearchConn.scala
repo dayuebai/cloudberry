@@ -20,7 +20,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
   def postControl(query: String): Future[Boolean] = {
     if (query.startsWith("[")) {
-      multiPostWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
+      multiPostWithCheckingStatus(query, (ws: WSResponse) => true, (ws: WSResponse) => false)
     }
     else {
       postWithCheckingStatus(query, (ws: WSResponse, query) => true, (ws: WSResponse) => false)
@@ -42,16 +42,31 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     }
   }
 
-  def multiPostWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
+  def multiPostWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
     println("CALL multipost")
     var jsonQuery = Json.parse(query).as[Seq[JsObject]]
     println("jsonQuery: " + jsonQuery)
-    val headQuery = jsonQuery.head.toString()
-    jsonQuery = jsonQuery.drop(1)
-    println("after drop, jsonquery is: " + jsonQuery)
-    println("headQuery: " + headQuery)
-    post(headQuery).map {
-      wsResponse => succeedHandler(wsResponse, query)
+
+    while (jsonQuery.length != 1) {
+      val headQuery = jsonQuery.head.toString()
+      jsonQuery = jsonQuery.drop(1)
+      println("headQuery: " + headQuery)
+      println("after drop, jsonquery is: " + jsonQuery)
+
+      post(headQuery).map { wsResponse =>
+        val responseCode = wsResponse.status
+        println("multi post Query succeeded, status code: " + responseCode + " query: " + headQuery)
+      }
+    }
+    post(jsonQuery.head.toString()).map { wsResponse =>
+      val responseCode = wsResponse.status
+      if (responseCode == 200) {
+        succeedHandler(wsResponse)
+      }
+      else{
+        Logger.info("multi post Query failed: " + Json.prettyPrint(wsResponse.json))
+        failureHandler(wsResponse)
+      }
     }
   }
 
@@ -63,15 +78,18 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
 
     val queryURL = url + "/" + dataset
-    val filterPath = aggregation match {
-      case "" => if ((jsonQuery \ "groupAsList").getOrElse(JsNull) == JsNull) "?filter_path=hits.hits._source" else "?filter_path=aggregations"
-      case "count" => "?filter_path=hits.total"
-      case "min" | "max" => {
-        val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
-        println(s"""?size=0&filter_path=aggregations.$asField.value_as_string""")
-        s"""?size=0&filter_path=aggregations.$asField.value_as_string"""
+    val filterPath = ""
+    if (method != "drop" || method != "create") {
+      aggregation match {
+        case "" => if ((jsonQuery \ "groupAsList").getOrElse(JsNull) == JsNull) "?filter_path=hits.hits._source" else "?filter_path=aggregations"
+        case "count" => "?filter_path=hits.total"
+        case "min" | "max" => {
+          val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
+          println(s"""?size=0&filter_path=aggregations.$asField.value_as_string""")
+          s"""?size=0&filter_path=aggregations.$asField.value_as_string"""
+        }
+        case _ => ???
       }
-      case _ => ???
     }
 
     jsonQuery -= "method"
@@ -89,11 +107,11 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
       case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
-      case "delete" => ???
       case "upsert" => {
         val records = (jsonQuery \ "records").get.as[List[JsValue]].mkString("", "\n", "\n")
         wSClient.url(queryURL + "/_doc" + "/_bulk").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(records)
       }
+      case "drop" => wSClient.url(queryURL).withRequestTimeout(Duration.Inf).delete()
       case _ => {println("NO MATCH METHOD"); ???}
     }
     f.onFailure(wsFailureHandler(query))

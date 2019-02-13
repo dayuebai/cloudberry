@@ -260,7 +260,7 @@ curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: a
 
 AsterixDB:
 
-```aidl
+```
 create type twitter.typeTweet if not exists as open {
   place : {   bounding_box : string },
   favorite_count : double,
@@ -294,7 +294,66 @@ where t.`create_at` < datetime('2019-02-03T13:48:20.676-0800') and ftcontains(t.
 ```
 
 Elasticsearch:
+If deleting non-existing database, status code is `404` with the following code block:
+```
+curl -X DELETE "localhost:9200/test"
+result:
+{
+    "error": {
+        "root_cause": [
+            {
+                "type": "index_not_found_exception",
+                "reason": "no such index",
+                "resource.type": "index_or_alias",
+                "resource.id": "test",
+                "index_uuid": "_na_",
+                "index": "test"
+            }
+        ],
+        "type": "index_not_found_exception",
+        "reason": "no such index",
+        "resource.type": "index_or_alias",
+        "resource.id": "test",
+        "index_uuid": "_na_",
+        "index": "test"
+    },
+    "status": 404
+}
+```
+Creating exisiting database (result in `400`):
+```
+curl -X PUT "localhost:9200/test"
+result:
+{
+    "error": {
+        "root_cause": [
+            {
+                "type": "resource_already_exists_exception",
+                "reason": "index [test/HBZqZlPHRgW79zZH7OUb1w] already exists",
+                "index_uuid": "HBZqZlPHRgW79zZH7OUb1w",
+                "index": "test"
+            }
+        ],
+        "type": "resource_already_exists_exception",
+        "reason": "index [test/HBZqZlPHRgW79zZH7OUb1w] already exists",
+        "index_uuid": "HBZqZlPHRgW79zZH7OUb1w",
+        "index": "test"
+    },
+    "status": 400
+}
+```
 
-```aidl
-
+Reindex query: 
+```
+curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
+{
+  "source": {
+    "index": "twitter.ds_tweet",
+    "query":{"bool":{"must":[{"range":{"create_at":{"lt":"2019-02-12T23:06:06.190-0800","format":"strict_date_time"}}},{"match":{"text":{"query":"sad","operator":"and"}}}]}}
+  },
+  "dest": {
+    "index": "test"
+  }
+}
+'
 ```
