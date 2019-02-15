@@ -293,6 +293,21 @@ where t.`create_at` < datetime('2019-02-03T13:48:20.676-0800') and ftcontains(t.
 )
 ```
 
+Reindex query: 
+```
+curl -X POST "localhost:9200/_reindex?refresh" -H 'Content-Type: application/json' -d'
+{
+  "source": {
+    "index": "twitter.ds_tweet",
+    "query":{"bool":{"must":[{"range":{"create_at":{"lt":"2019-02-12T23:06:06.190-0800","format":"strict_date_time"}}},{"match":{"text":{"query":"sad","operator":"and"}}}]}}
+  },
+  "dest": {
+    "index": "test"
+  }
+}
+'
+```
+
 Elasticsearch:
 If deleting non-existing database, status code is `404` with the following code block:
 ```
@@ -320,6 +335,7 @@ result:
     "status": 404
 }
 ```
+
 Creating exisiting database (result in `400`):
 ```
 curl -X PUT "localhost:9200/test"
@@ -341,19 +357,4 @@ result:
     },
     "status": 400
 }
-```
-
-Reindex query: 
-```
-curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
-{
-  "source": {
-    "index": "twitter.ds_tweet",
-    "query":{"bool":{"must":[{"range":{"create_at":{"lt":"2019-02-12T23:06:06.190-0800","format":"strict_date_time"}}},{"match":{"text":{"query":"sad","operator":"and"}}}]}}
-  },
-  "dest": {
-    "index": "test"
-  }
-}
-'
 ```
