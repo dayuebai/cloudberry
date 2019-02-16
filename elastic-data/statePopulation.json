@@ -1,0 +1,104 @@
+{"index":{"_id":"1"}}
+{"stateName": "Alabama", "population": 4863300, "stateID": 1}
+{"index":{"_id":"2"}}
+{"stateName": "Alaska", "population": 741894, "stateID": 2}
+{"index":{"_id":"4"}}
+{"stateName": "Arizona", "population": 6931071, "stateID": 4}
+{"index":{"_id":"5"}}
+{"stateName": "Arkansas", "population": 2988248, "stateID": 5}
+{"index":{"_id":"6"}}
+{"stateName": "California", "population": 39250017, "stateID": 6}
+{"index":{"_id":"8"}}
+{"stateName": "Colorado", "population": 5540545, "stateID": 8}
+{"index":{"_id":"9"}}
+{"stateName": "Connecticut", "population": 3576452, "stateID": 9}
+{"index":{"_id":"10"}}
+{"stateName": "Delaware", "population": 952065, "stateID": 10}
+{"index":{"_id":"11"}}
+{"stateName": "District of Columbia", "population": 681170, "stateID": 11}
+{"index":{"_id":"12"}}
+{"stateName": "Florida", "population": 20612439, "stateID": 12}
+{"index":{"_id":"13"}}
+{"stateName": "Georgia", "population": 10310371, "stateID": 13}
+{"index":{"_id":"15"}}
+{"stateName": "Hawaii", "population": 1428557, "stateID": 15}
+{"index":{"_id":"16"}}
+{"stateName": "Idaho", "population": 1683140, "stateID": 16}
+{"index":{"_id":"17"}}
+{"stateName": "Illinois", "population": 12801539, "stateID": 17}
+{"index":{"_id":"18"}}
+{"stateName": "Indiana", "population": 6633053, "stateID": 18}
+{"index":{"_id":"19"}}
+{"stateName": "Iowa", "population": 3134693, "stateID": 19}
+{"index":{"_id":"20"}}
+{"stateName": "Kansas", "population": 2907289, "stateID": 20}
+{"index":{"_id":"21"}}
+{"stateName": "Kentucky", "population": 4436974, "stateID": 21}
+{"index":{"_id":"22"}}
+{"stateName": "Louisiana", "population": 4681666, "stateID": 22}
+{"index":{"_id":"23"}}
+{"stateName": "Maine", "population": 1331479, "stateID": 23}
+{"index":{"_id":"24"}}
+{"stateName": "Maryland", "population": 6016447, "stateID": 24}
+{"index":{"_id":"25"}}
+{"stateName": "Massachusetts", "population": 6811779, "stateID": 25}
+{"index":{"_id":"26"}}
+{"stateName": "Michigan", "population": 9928300, "stateID": 26}
+{"index":{"_id":"27"}}
+{"stateName": "Minnesota", "population": 5519952, "stateID": 27}
+{"index":{"_id":"28"}}
+{"stateName": "Mississippi", "population": 2988726, "stateID": 28}
+{"index":{"_id":"29"}}
+{"stateName": "Missouri", "population": 6093000, "stateID": 29}
+{"index":{"_id":"30"}}
+{"stateName": "Montana", "population": 1042520, "stateID": 30}
+{"index":{"_id":"31"}}
+{"stateName": "Nebraska", "population": 1907116, "stateID": 31}
+{"index":{"_id":"32"}}
+{"stateName": "Nevada", "population": 2940058, "stateID": 32}
+{"index":{"_id":"33"}}
+{"stateName": "New Hampshire", "population": 1334795, "stateID": 33}
+{"index":{"_id":"34"}}
+{"stateName": "New Jersey", "population": 8944469, "stateID": 34}
+{"index":{"_id":"35"}}
+{"stateName": "New Mexico", "population": 2081015, "stateID": 35}
+{"index":{"_id":"36"}}
+{"stateName": "New York", "population": 19745289, "stateID": 36}
+{"index":{"_id":"37"}}
+{"stateName": "North Carolina", "population": 10146788, "stateID": 37}
+{"index":{"_id":"38"}}
+{"stateName": "North Dakota", "population": 757952, "stateID": 38}
+{"index":{"_id":"39"}}
+{"stateName": "Ohio", "population": 11614373, "stateID": 39}
+{"index":{"_id":"40"}}
+{"stateName": "Oklahoma", "population": 3923561, "stateID": 40}
+{"index":{"_id":"41"}}
+{"stateName": "Oregon", "population": 4093465, "stateID": 41}
+{"index":{"_id":"42"}}
+{"stateName": "Pennsylvania", "population": 12784227, "stateID": 42}
+{"index":{"_id":"44"}}
+{"stateName": "Rhode Island", "population": 1056426, "stateID": 44}
+{"index":{"_id":"45"}}
+{"stateName": "South Carolina", "population": 4961119, "stateID": 45}
+{"index":{"_id":"46"}}
+{"stateName": "South Dakota", "population": 865454, "stateID": 46}
+{"index":{"_id":"47"}}
+{"stateName": "Tennessee", "population": 6651194, "stateID": 47}
+{"index":{"_id":"48"}}
+{"stateName": "Texas", "population": 27862596, "stateID": 48}
+{"index":{"_id":"49"}}
+{"stateName": "Utah", "population": 3051217, "stateID": 49}
+{"index":{"_id":"50"}}
+{"stateName": "Vermont", "population": 624594, "stateID": 50}
+{"index":{"_id":"51"}}
+{"stateName": "Virginia", "population": 8411808, "stateID": 51}
+{"index":{"_id":"53"}}
+{"stateName": "Washington", "population": 7288000, "stateID": 53}
+{"index":{"_id":"54"}}
+{"stateName": "West Virginia", "population": 1831102, "stateID": 54}
+{"index":{"_id":"55"}}
+{"stateName": "Wisconsin", "population": 5778708, "stateID": 55}
+{"index":{"_id":"56"}}
+{"stateName": "Wyoming", "population": 585501, "stateID": 56}
+{"index":{"_id":"72"}}
+{"stateName": "Puerto Rico", "population": 3411307, "stateID": 72}
