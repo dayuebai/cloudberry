@@ -16,6 +16,8 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   override def defaultQueryResponse: JsValue = defaultEmptyResponse
 
   def postQuery(query: String): Future[JsValue] = {
+    val jsonQuery = Json.parse(query).as[JsObject]
+    if (jsonQuery
     postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
   }
 

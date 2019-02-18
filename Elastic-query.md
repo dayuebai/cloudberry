@@ -383,5 +383,60 @@ left outer join twitter.dsStatePopulation ll0 on ll0.`stateID` = tt.`state`
 Elasticsearch:
 
 ```
+curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: application/json' -d'
+{   
+    "size": 0,
+    "query": {
+        "bool": {
+            "must": [
+            {
+                "match": {
+                    "text": {
+                        "query": "happy",
+                        "operator" : "and"
+                    } 
+                }
+            },
+            {
+                "range": {
+                    "create_at": {
+                        "gte": "2015-01-27T15:04:19.068-0800",
+                        "lte": "2019-01-28T15:04:19.068-0800",
+                        "format": "strict_date_time"
+                    }
+                }
+            },
+            {
+                "terms": {
+                    "geo_tag.stateID": [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 56]
+                }
+            }]
+        }
+    },
+    "aggs": {
+        "state": {
+            "terms": {
+                "size": 2147483647,
+                "field": "geo_tag.stateID",
+                "min_doc_count": 1,
+                "order": {"_key":"asc"}
+            }
+        }
+    }
+}'
 
+
+curl -X GET "localhost:9200/twitter.dsstatepopulation/_search?pretty&filter_path=hits.hits._source.population" -H 'Content-Type: application/json' -d'
+{   
+    "sort": {"stateID": {"order": "asc"}},
+    "query": {
+        "bool": {
+            "must": {
+                "terms": {
+                    "stateID": [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 56]
+                }
+            }
+        }
+    }
+}'
 ```

@@ -146,9 +146,9 @@ class ElasticsearchGenerator extends IQLGenerator {
     queryBuilder += ("method" -> JsString("search"))
     queryBuilder += ("dataset" -> JsString(query.dataset))
 
-    val (resultAfterLookup, queryAfterLookup) = parseLookup(query.lookup, exprMap, queryBuilder, false)
+//    val (resultAfterLookup, queryAfterLookup) = parseLookup(query.lookup, exprMap, queryBuilder, false)
 
-    val (resultAfterUnnest, queryAfterUnnest) = parseUnnest(query.unnest, resultAfterLookup.exprMap, queryAfterLookup)
+    val (resultAfterUnnest, queryAfterUnnest) = parseUnnest(query.unnest, exprMap, queryBuilder)
     val unnestTests = resultAfterUnnest.strs
 
     val (resultAfterFilter, queryAfterFilter) = parseFilter(query.filter, resultAfterUnnest.exprMap, unnestTests, queryAfterUnnest)
@@ -239,13 +239,6 @@ class ElasticsearchGenerator extends IQLGenerator {
 //  }
 //
   // Private
-  private def parseLookup(lookups: Seq[LookupStatement],
-                          exprMap: Map[String, FieldExpr],
-                          queryBuilder: JsObject,
-                          inGroup: Boolean): (ParsedResult, JsObject) = {
-    (ParsedResult(Seq.empty, exprMap), queryBuilder)
-  }
-
   private def parseUnnest(unnest: Seq[UnnestStatement],
                           exprMap: Map[String, FieldExpr], queryAfterLookup: JsObject): (ParsedResult, JsObject) = {
     (ParsedResult(Seq.empty, exprMap), queryAfterLookup)
@@ -305,7 +298,13 @@ class ElasticsearchGenerator extends IQLGenerator {
                 case level: Level =>
                   val hierarchyField = by.field.asInstanceOf[HierarchyField]
                   val field = hierarchyField.levels.find(_._1 == level.levelTag).get._2
-                  groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "min_doc_count": 1} """.stripMargin)
+                  if (group.lookups.isEmpty) {
+                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "min_doc_count": 1} """.stripMargin)
+                  }
+                  else {
+                    // hard coded sequence for later joins
+                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "min_doc_count": 1 , "order": {"_key":"asc"}} """.stripMargin)
+                  }
                 case GeoCellTenth => ???
                 case GeoCellHundredth => ???
                 case _ => throw new QueryParsingException(s"unknown function: ${func.name}")
@@ -318,30 +317,30 @@ class ElasticsearchGenerator extends IQLGenerator {
         shallowQueryAfterAppend += ("aggs" -> Json.parse(groupStr.toString))
         shallowQueryAfterAppend += ("groupAsList" -> groupAsArray)
 
-//        group.aggregates.foreach { aggr =>
-//          val fieldExpr = exprMap(aggr.field.name)
-//          //def
-//          val aggrExpr = parseAggregateFunc(aggr, fieldExpr.refExpr)
-//          //ref
-//          val newExpr = s"$quote${aggr.as.name}$quote"
-//          producedExprs += aggr.as.name -> FieldExpr(newExpr, aggrExpr)
-//          val field = aggr.field.name
-//          val as = aggr.as.name
-//          val funcName = typeImpl.getAggregateStr(aggr.func)
-//          val aggregatedJson = Json.parse(s"""{"func": "$funcName", "as": "$as"}""")
-//          aggregateArray.append(aggregatedJson)
-//        }
         if (!group.lookups.isEmpty) {
-          shallowQueryAfterAppend += ("join" -> JsBoolean(true))
+          // Only support 1 join
+
+          val body = group.lookups.head
+          val joinQuery = Json.parse(
+            s"""{
+               |"dataset": "${body.dataset}",
+               |"method": "search",
+               |"sort": {
+               |  "${body.lookupKeys.head.name}": { "order": "asc" }
+               |  },
+               |  "query": {
+               |   "bool": {
+               |   "must": {
+               |   "terms": { "${body.lookupKeys.head.name}" : [] }
+               |   } } } }""".stripMargin)
+          println(joinQuery)
+          val joinArray = Json.arr(shallowQueryAfterAppend, joinQuery).as[JsObject]
+          val joinObject = Json.obj("join" -> joinArray)
+          return (ParsedResult(Seq.empty, exprMap), joinObject)
+
         }
-//          //we need to update producedExprs
-//          val producedExprMap = producedExprs.result().toMap
-//          val newExprMap =
-//            producedExprMap.map {
-//              case (field, expr) => field -> FieldExpr(s"$groupedLookupSourceVar.$quote$field$quote", s"$groupedLookupSourceVar.$quote$field$quote")
-//            }
-//          queryBuilder.insert(0, s"from (\n${parseProject(producedExprMap)}\n")
-//          queryBuilder.append(s"\n) $groupedLookupSourceVar\n")
+
+
 //          val resultAfterLookup = parseLookup(group.lookups, newExprMap, queryBuilder, true)
 //          ParsedResult(Seq.empty, resultAfterLookup.exprMap)
 //        } else {
