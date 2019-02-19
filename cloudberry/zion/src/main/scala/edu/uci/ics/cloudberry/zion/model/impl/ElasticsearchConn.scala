@@ -16,33 +16,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   override def defaultQueryResponse: JsValue = defaultEmptyResponse
 
   def postQuery(query: String): Future[JsValue] = {
-    val jsonQuery = Json.parse(query).as[JsObject]
-    if (jsonQuery.keys.contains("join")) {
-      var joinStatements = jsonQuery.as[Seq[JsObject]]
-      val aggrQuery = joinStatements.head.toString()
-      joinStatements = joinStatements.drop(1)
-      println("aggregation search query: " + aggrQuery)
-      println("after drop, jsonquery is: " + joinStatements)
-
-      var stateArray = Seq[Int]()
-      val c = post(aggrQuery).map { wsResponse =>
-        val responseCode = wsResponse.status
-        println("multi post Query, status code: " + responseCode + " query: " + aggrQuery)
-        val responseBody = wsResponse.json.as[JsObject]
-        val ctBuckets = (responseBody \ "join").get.as[Seq[JsObject]]
-        for (ctJson <- ctBuckets) {
-          stateArray :+ (ctJson \ "key").get.as[Int]
-        }
-        println("state Array is: " + stateArray.toString)
-      }
-
-
       postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
-    }
-    else {
-      postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
-    }
-
   }
 
   def postControl(query: String): Future[Boolean] = {
@@ -70,7 +44,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
   def transactionWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
-    println("CALL multipost")
+    println("CALL TRANSACTION POST")
     var jsonQuery = Json.parse(query).as[Seq[JsObject]]
     println("jsonQuery: " + jsonQuery)
 
@@ -94,7 +68,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         succeedHandler(wsResponse)
       }
       else{
-        Logger.info("multi post Query failed: " + Json.prettyPrint(wsResponse.json))
+        Logger.info("TRANSACTION POST QUERY FAILED: " + Json.prettyPrint(wsResponse.json))
         failureHandler(wsResponse)
       }
     }
@@ -109,16 +83,17 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     var dataset = ""
     var queryURL = ""
 
-    if (method != "reindex") {
-      dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
-      queryURL = url + "/" + dataset
-    }
-    else {
-      queryURL = url + "/_reindex?refresh"
+    method match {
+      case "reindex" =>  queryURL = url + "/_reindex?refresh"
+      case "msearch" => queryURL = url + "/_msearch"
+      case _ => {
+        dataset = (jsonQuery \ "dataset").get.toString().stripPrefix("\"").stripSuffix("\"")
+        queryURL = url + "/" + dataset
+      }
     }
 
     var filterPath = ""
-    if (method != "drop" || method != "create") {
+    if (method != "drop" && method != "create" && method != "msearch") {
       filterPath = aggregation match {
         case "" => if ((jsonQuery \ "groupAsList").getOrElse(JsNull) == JsNull) "?filter_path=hits.hits._source" else "?filter_path=aggregations"
         case "count" => "?filter_path=hits.total"
@@ -135,7 +110,8 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     jsonQuery -= "dataset"
     jsonQuery -= "aggregation"
     jsonQuery -= "groupAsList"
-    jsonQuery -= "join"
+    jsonQuery -= "selectFields"
+    jsonQuery -= "joinTermsFilter"
 
     Logger.info("Query: " + query)
     Logger.info("method: " + method)
@@ -146,8 +122,13 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
       case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
+      case "msearch" => {
+        val queries = (jsonQuery \ "queries").get.as[List[JsValue]].mkString("", "\n", "\n") // Queries must be terminated by a new line character
+        println("QUERIES: " + queries)
+        wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(queries)
+      }
       case "upsert" => {
-        val records = (jsonQuery \ "records").get.as[List[JsValue]].mkString("", "\n", "\n")
+        val records = (jsonQuery \ "records").get.as[List[JsValue]].mkString("", "\n", "\n") // Queries must be terminated by a new line character
         wSClient.url(queryURL + "/_doc" + "/_bulk?refresh").withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(records)
       }
       case "drop" => wSClient.url(queryURL).withRequestTimeout(Duration.Inf).delete()
@@ -168,17 +149,36 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val jsonAggregation = (jsonQuery \ "aggregation" \ "func").getOrElse(JsNull)
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
     val jsonGroupAsList = (jsonQuery \ "groupAsList").getOrElse(JsNull)
+    val joinSelectField = (jsonQuery \ "joinSelectField").getOrElse(JsNull)
 
     if (jsonGroupAsList != JsNull) {
       var resArray = Json.arr()
       val groupAsList = jsonGroupAsList.as[Seq[String]]
-      println("response for parseResponse" + response)
-      println("group As List: " + groupAsList)
-      val buckets: Seq[JsValue] = (response \ "aggregations" \ groupAsList.head \ "buckets").get.as[Seq[JsValue]]
-      for (bucket <- buckets) {
-        val keyValue = (bucket \ "key").get.as[Int]
-        if ((jsonQuery \ "join").getOrElse(JsNull) == JsNull) {
-          val liquid: Seq[JsValue] = (bucket \ groupAsList.last \ "buckets").get.as[Seq[JsValue]]
+
+      if (joinSelectField != JsNull) { // JOIN query with aggregation
+        val sortedJoinTermsFilter = (jsonQuery \ "joinTermsFilter").get.as[Seq[Int]].sorted
+        val responseList= (response \ "responses").as[Seq[JsObject]]
+        val buckets = (responseList.head \ "aggregations" \ groupAsList.head \ "buckets").get.as[Seq[JsObject]]
+        val joinBucket = (responseList.last \ "hits" \ "hits").get.as[Seq[JsObject]]
+        val joinSelectFieldString = joinSelectField.toString().stripPrefix("\"").stripSuffix("\"")
+
+        for (bucket <- buckets) {
+          val key = (bucket \ "key").get.as[Int]
+          val count = (bucket \ "doc_count").get.as[Int]
+          val keyIndex = binarySearch(sortedJoinTermsFilter, key)
+          val joinValue = (joinBucket(keyIndex) \ "_source" \ joinSelectFieldString).get.as[Int]
+
+          var tmp_json = Json.obj(groupAsList.head -> JsNumber(key))
+          tmp_json += ("count" -> JsNumber(count))
+          tmp_json += (joinSelectFieldString -> JsNumber(joinValue))
+          resArray = resArray.append(tmp_json)
+        }
+      }
+      else {
+        val buckets: Seq[JsObject] = (response \ "aggregations" \ groupAsList.head \ "buckets").get.as[Seq[JsObject]]
+        for (bucket <- buckets) {
+          val keyValue = (bucket \ "key").get.as[Int]
+          val liquid: Seq[JsObject] = (bucket \ groupAsList.last \ "buckets").get.as[Seq[JsObject]]
           for (drop <- liquid) {
             var tmp_json = Json.obj()
             tmp_json += (groupAsList.head -> JsNumber(keyValue))
@@ -187,22 +187,13 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
             resArray = resArray.append(tmp_json)
           }
         }
-        else {
-          val docCount = (bucket \ "doc_count").get.as[Int]
-          var jsonObj = Json.obj()
-          jsonObj += (groupAsList.head -> JsNumber(keyValue))
-          jsonObj += ("count" -> JsNumber(docCount))
-          // Assume population is now TODO: implement join query
-          jsonObj += ("population" -> JsNumber(1))
-          resArray = resArray.append(jsonObj)
-        }
       }
-      println("retArray is: " + resArray)
+      println("resArray is: " + resArray)
       return resArray
     }
 
     aggregation match {
-      case "" => {
+      case "" => { // Search query without aggregation
         val sourceJsValue = (response.asInstanceOf[JsObject] \ "hits" \ "hits").getOrElse(JsNull)
         if (sourceJsValue != JsNull) {
           val sourceArray = sourceJsValue.as[Seq[JsObject]]
@@ -214,13 +205,13 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         }
         Json.arr()
       }
-      case "count" => {
+      case "count" => { // Aggregation (function: count)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
         val count = (response.asInstanceOf[JsObject] \ "hits" \ "total").get.as[JsNumber]
         println(Json.arr(Json.obj(asField -> count)))
         Json.arr(Json.obj(asField -> count))
       }
-      case "min" | "max" => {
+      case "min" | "max" => { // Aggregation (function: min/max)
         println("min/max response: " + response)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
         val res = (response.asInstanceOf[JsObject] \ "aggregations" \ asField \ "value_as_string").get.as[JsString]
@@ -228,8 +219,27 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         println(s"$asField return: " + Json.arr(jsonObjRes))
         Json.arr(jsonObjRes)
       }
-      case _ => ???
+      case _ => ??? // Unmatched
     }
+  }
+
+  // Helper function: find the index of an element in an array in O(logN) time.
+  protected def binarySearch(arr: Seq[Int], x: Int): Int = {
+    var left = 0
+    var right = arr.length - 1
+
+    while (left <= right) {
+      val middle = left + (right - left) / 2
+
+      if (arr(middle) == x) {
+        return middle
+      } else if(arr(middle) < x) {
+        left = middle + 1
+      } else {
+        right = middle - 1
+      }
+    }
+    -1
   }
 }
 

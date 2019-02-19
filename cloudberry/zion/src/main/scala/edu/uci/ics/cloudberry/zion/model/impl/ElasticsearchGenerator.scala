@@ -217,10 +217,9 @@ class ElasticsearchGenerator extends IQLGenerator {
         parseFilterRelation(filter, exprMap(filter.field.name).refExpr)
       }
       val filterStr = (unnestTestStrs ++ filterStrs).mkString("""{"must": [""", ",", "]}")
-//      println("filterStr: " + filterStr)
 
       shallowQueryAfterUnnest += ("query" -> Json.obj("bool" -> Json.parse(filterStr)))
-//      println("result after parse filter: " + shallowQueryAfterUnnest)
+
       (ParsedResult(Seq.empty, exprMap), shallowQueryAfterUnnest)
     }
   }
@@ -236,15 +235,12 @@ class ElasticsearchGenerator extends IQLGenerator {
     groupOpt match {
       case Some(group) =>
         shallowQueryAfterAppend += ("size" -> JsNumber(0))
-//        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
         val groupStr = new mutable.StringBuilder()
         var groupAsArray = Json.arr()
-//        val aggregateArray = Json.arr()
 
         for (i <- group.bys.indices) {
           val by = group.bys(i)
           val as = by.as.getOrElse(by.field).name
-//          val fieldExpr = exprMap(by.field.name).refExpr
           groupAsArray = groupAsArray.append(JsString(as))
           if (i == 0)
             groupStr.append(s"""{"$as": {""")
@@ -264,10 +260,10 @@ class ElasticsearchGenerator extends IQLGenerator {
                   if (group.lookups.isEmpty) {
                     groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647} """.stripMargin)
                   }
-                  else {
-                    // hard coded sequence for later joins
+                  else { // hard coded sequence for later joins
                     groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "order": {"_key":"asc"}} """.stripMargin)
                   }
+                case GeoCellTenth => ???
                 case GeoCellTenth => ???
                 case GeoCellHundredth => ???
                 case _ => throw new QueryParsingException(s"unknown function: ${func.name}")
@@ -276,9 +272,8 @@ class ElasticsearchGenerator extends IQLGenerator {
           }
         }
         groupStr.append("}" * group.bys.length * 2)
-//        println("groupStr: " + groupStr)
         shallowQueryAfterAppend += ("aggs" -> Json.parse(groupStr.toString))
-        shallowQueryAfterAppend += ("groupAsList" -> groupAsArray)
+
 
         // Only support single join (Snowflake not supported)
         if (!group.lookups.isEmpty) {
@@ -291,16 +286,21 @@ class ElasticsearchGenerator extends IQLGenerator {
           queryArray = queryArray :+ shallowQueryAfterAppend
 
           val body = group.lookups.head
-          val joinQuery = Json.parse(s"""{"sort": {"${body.lookupKeys.head.name}": { "order": "asc" }}, "query": {"bool": {"must": {"terms": { "${body.lookupKeys.head.name}" : ${joinTermsFilter.mkString("[", ",", "]")} } } } } }""".stripMargin).as[JsObject]
-          queryArray = queryArray :+ Json.obj("index" -> JsString(body.dataset))
+          val joinQuery = Json.parse(s"""{"_source": "${body.selectValues.head.name}", "size": 2147483647, "sort": {"${body.lookupKeys.head.name}": { "order": "asc" }}, "query": {"bool": {"must": {"terms": { "${body.lookupKeys.head.name}" : ${joinTermsFilter.mkString("[", ",", "]")} } } } } }""".stripMargin).as[JsObject]
+          queryArray = queryArray :+ Json.obj("index" -> JsString(body.dataset.toLowerCase())) // The name of dataset in Elasticsearch must be in lowercase.
           queryArray = queryArray :+ joinQuery
 
           var multiSearchQuery = Json.obj("method" -> JsString("msearch"))
           multiSearchQuery += ("queries" -> queryArray)
+          multiSearchQuery += ("groupAsList" -> groupAsArray)
+          multiSearchQuery += ("joinSelectField" -> JsString(body.selectValues.head.name))
+          multiSearchQuery += ("joinTermsFilter" -> Json.toJson(joinTermsFilter))
+
           println("multiSearchQuery: " + multiSearchQuery.toString())
           return (ParsedResult(Seq.empty, exprMap), multiSearchQuery)
         }
 
+        shallowQueryAfterAppend += ("groupAsList" -> groupAsArray)
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterAppend)
 
       case None =>
