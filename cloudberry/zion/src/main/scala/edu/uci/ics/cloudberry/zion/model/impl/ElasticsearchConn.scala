@@ -17,8 +17,32 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
   def postQuery(query: String): Future[JsValue] = {
     val jsonQuery = Json.parse(query).as[JsObject]
-    if (jsonQuery
-    postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
+    if (jsonQuery.keys.contains("join")) {
+      var joinStatements = jsonQuery.as[Seq[JsObject]]
+      val aggrQuery = joinStatements.head.toString()
+      joinStatements = joinStatements.drop(1)
+      println("aggregation search query: " + aggrQuery)
+      println("after drop, jsonquery is: " + joinStatements)
+
+      var stateArray = Seq[Int]()
+      val c = post(aggrQuery).map { wsResponse =>
+        val responseCode = wsResponse.status
+        println("multi post Query, status code: " + responseCode + " query: " + aggrQuery)
+        val responseBody = wsResponse.json.as[JsObject]
+        val ctBuckets = (responseBody \ "join").get.as[Seq[JsObject]]
+        for (ctJson <- ctBuckets) {
+          stateArray :+ (ctJson \ "key").get.as[Int]
+        }
+        println("state Array is: " + stateArray.toString)
+      }
+
+
+      postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
+    }
+    else {
+      postWithCheckingStatus(query, (ws: WSResponse, query) => {parseResponse(ws.json, query)}, (ws: WSResponse) => defaultQueryResponse)
+    }
+
   }
 
   def postControl(query: String): Future[Boolean] = {

@@ -22,27 +22,6 @@ trait ElasticImpl {
       case None => throw new QueryParsingException(s"No implementation is provided for aggregate function ${aggregate.name}")
     }
   }
-//
-//  val datetime: String
-//  val round: String
-//
-//  val dayTimeDuration: String
-//  val yearMonthDuration: String
-//  val getIntervalStartDatetime: String
-//  val intervalBin: String
-//
-//  val spatialIntersect: String
-//  val createRectangle: String
-//  val createPoint: String
-//  val spatialCell: String
-//  val getPoints: String
-//
-//
-//  val similarityJaccard: String
-//  val fullTextContains: String
-//  val contains: String
-//  val wordTokens: String
-
 }
 
 object ElasticImpl extends ElasticImpl {
@@ -54,25 +33,6 @@ object ElasticImpl extends ElasticImpl {
     Sum -> "sum"
     // implement distinct_count, topK later
   )
-
-//  val datetime: String = "datetime"
-//  val round: String = "round"
-//
-//  val dayTimeDuration: String = "day_time_duration"
-//  val yearMonthDuration: String = "year_month_duration"
-//  val getIntervalStartDatetime: String = "get_interval_start_datetime"
-//  val intervalBin: String = "interval_bin"
-//
-//  val spatialIntersect: String = "spatial_intersect"
-//  val createRectangle: String = "create_rectangle"
-//  val createPoint: String = "create_point"
-//  val spatialCell: String = "spatial_cell"
-//  val getPoints: String = "get_points"
-//
-//  val similarityJaccard: String = "similarity_jaccard"
-//  val fullTextContains: String = "ftcontains"
-//  val contains: String = "contains"
-//  val wordTokens: String = "word_tokens"
 }
 
 
@@ -96,6 +56,9 @@ class ElasticsearchGenerator extends IQLGenerator {
   case class ParsedResult(strs: Seq[String], exprMap: Map[String, FieldExpr])
 
   protected val allFieldVar: String = "*"
+
+  // Global variable: JOIN field
+  protected var joinTermsFilter = Seq[Int]()
 
   protected val typeImpl: ElasticImpl = ElasticImpl
 
@@ -139,8 +102,8 @@ class ElasticsearchGenerator extends IQLGenerator {
     var queryBuilder = Json.obj()
 
     val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
-    println("SchemaMap: " + schemaMap)
-    println("ExprMap: " + exprMap)
+//    println("SchemaMap: " + schemaMap)
+//    println("ExprMap: " + exprMap)
 
 //    println("dataset name: " + query.dataset)
     queryBuilder += ("method" -> JsString("search"))
@@ -176,7 +139,7 @@ class ElasticsearchGenerator extends IQLGenerator {
       s"""{ "method": "drop", "dataset": "$dataset" }"""
     )
     val createStatement = Json.parse(
-      s"""{"method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } } }"""
+      s"""{ "method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } }, "settings": { "index": { "max_result_window": 2147483647 } } }"""
     )
     var selectStatement = Json.parse(parseQuery(create.query, schemaMap)).as[JsObject]
 
@@ -294,16 +257,16 @@ class ElasticsearchGenerator extends IQLGenerator {
                 case bin: Bin => ???
                 case interval: Interval => // assume has time field
                   val duration = parseIntervalDuration(interval)
-                  groupStr.append(s""" "date_histogram": {"field": "${by.field.name}", "interval": "$duration", "min_doc_count": 1} """.stripMargin)
+                  groupStr.append(s""" "date_histogram": {"field": "${by.field.name}", "interval": "$duration"} """.stripMargin)
                 case level: Level =>
                   val hierarchyField = by.field.asInstanceOf[HierarchyField]
                   val field = hierarchyField.levels.find(_._1 == level.levelTag).get._2
                   if (group.lookups.isEmpty) {
-                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "min_doc_count": 1} """.stripMargin)
+                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647} """.stripMargin)
                   }
                   else {
                     // hard coded sequence for later joins
-                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "min_doc_count": 1 , "order": {"_key":"asc"}} """.stripMargin)
+                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "order": {"_key":"asc"}} """.stripMargin)
                   }
                 case GeoCellTenth => ???
                 case GeoCellHundredth => ???
@@ -317,37 +280,29 @@ class ElasticsearchGenerator extends IQLGenerator {
         shallowQueryAfterAppend += ("aggs" -> Json.parse(groupStr.toString))
         shallowQueryAfterAppend += ("groupAsList" -> groupAsArray)
 
+        // Only support single join (Snowflake not supported)
         if (!group.lookups.isEmpty) {
-          // Only support 1 join
+
+          var queryArray = Json.arr()
+          val selectDataset = (shallowQueryAfterAppend \ "dataset").get.as[JsString]
+          shallowQueryAfterAppend -= "dataset"
+          shallowQueryAfterAppend -= "method"
+          queryArray = queryArray :+ Json.obj("index" -> selectDataset)
+          queryArray = queryArray :+ shallowQueryAfterAppend
 
           val body = group.lookups.head
-          val joinQuery = Json.parse(
-            s"""{
-               |"dataset": "${body.dataset}",
-               |"method": "search",
-               |"sort": {
-               |  "${body.lookupKeys.head.name}": { "order": "asc" }
-               |  },
-               |  "query": {
-               |   "bool": {
-               |   "must": {
-               |   "terms": { "${body.lookupKeys.head.name}" : [] }
-               |   } } } }""".stripMargin)
-          println(joinQuery)
-          val joinArray = Json.arr(shallowQueryAfterAppend, joinQuery).as[JsObject]
-          val joinObject = Json.obj("join" -> joinArray)
-          return (ParsedResult(Seq.empty, exprMap), joinObject)
+          val joinQuery = Json.parse(s"""{"sort": {"${body.lookupKeys.head.name}": { "order": "asc" }}, "query": {"bool": {"must": {"terms": { "${body.lookupKeys.head.name}" : ${joinTermsFilter.mkString("[", ",", "]")} } } } } }""".stripMargin).as[JsObject]
+          queryArray = queryArray :+ Json.obj("index" -> JsString(body.dataset))
+          queryArray = queryArray :+ joinQuery
 
+          var multiSearchQuery = Json.obj("method" -> JsString("msearch"))
+          multiSearchQuery += ("queries" -> queryArray)
+          println("multiSearchQuery: " + multiSearchQuery.toString())
+          return (ParsedResult(Seq.empty, exprMap), multiSearchQuery)
         }
 
-
-//          val resultAfterLookup = parseLookup(group.lookups, newExprMap, queryBuilder, true)
-//          ParsedResult(Seq.empty, resultAfterLookup.exprMap)
-//        } else {
-//          ParsedResult(Seq.empty, producedExprs.result().toMap)
-//        }
-
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterAppend)
+
       case None =>
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterAppend)
     }
@@ -359,49 +314,23 @@ class ElasticsearchGenerator extends IQLGenerator {
     var shallowQueryAfterGroup = queryAfterGroup
     selectOpt match {
       case Some(select) =>
-        val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
         val orderStrs = select.orderOn.zip(select.order).map {
           case (orderOn, order) =>
             val expr = orderOn.name
             val orderStr = if (order == SortOrder.DSC) "desc" else "asc"
             s"""|{"$expr": {"order": "$orderStr"}}""".stripMargin
         }
-//        println("orderStrs: " + orderStrs)
         val orderStr =
           if (!orderStrs.isEmpty) {
             orderStrs.mkString("[", ",", "]")
           } else {
             ""
           }
-        println("orderStr: " + orderStr)
-
         val limit = select.limit
         val offset = select.offset
         println("limitStr: " + limit)
         println("offsetStr: " + offset)
 
-        if (select.fields.isEmpty) {
-          producedExprs ++= exprMap
-        } else {
-          select.fields.foreach {
-            case AllField => producedExprs ++= exprMap
-            case field => producedExprs += field.name -> exprMap(field.name)
-          }
-        }
-        val newExprMap = producedExprs.result().toMap
-        val projectStr = if (select.fields.isEmpty) {
-          if (query.hasUnnest || query.hasGroup) {
-            parseProject(exprMap)
-          } else {
-            println("select.fields is empty & no unnest & no group")
-            // SQLPP: s"select value $sourceVar"
-            // Elastic: select all fields
-            ""
-          }
-        } else {
-          println("select.fields is not empty")
-          parseProject(newExprMap)
-        }
 
         if (!orderStr.isEmpty())
           shallowQueryAfterGroup += ("sort" -> Json.parse(orderStr))
@@ -410,17 +339,11 @@ class ElasticsearchGenerator extends IQLGenerator {
         if (offset != None)
           shallowQueryAfterGroup += ("from" -> JsNumber(offset))
 
-        (ParsedResult(Seq.empty, newExprMap), shallowQueryAfterGroup)
-
-
+        (ParsedResult(Seq.empty, exprMap), shallowQueryAfterGroup)
       case None =>
         println("in parseSelect function, case None is matched")
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterGroup)
     }
-  }
-
-  private def parseProject(exprMap: Map[String, FieldExpr]): String = {
-    ""
   }
 
   private def parseGlobalAggr(globalAggrOpt: Option[GlobalAggregateStatement],
@@ -514,8 +437,10 @@ class ElasticsearchGenerator extends IQLGenerator {
       case Relation.inRange =>
         if (filter.values.size != 2) throw new QueryParsingException(s"relation: ${filter.relation} requires two parameters")
         s"""{"range": {"$fieldExpr": {"gte": ${filter.values(0)}, "lt": ${filter.values(1)}}}}""".stripMargin
-      case Relation.in =>
+      case Relation.in => {
+        joinTermsFilter = filter.values.asInstanceOf[Seq[Int]]
         s"""{"terms": {"$fieldExpr": [${filter.values.mkString(",")}]}}""".stripMargin
+      }
       case Relation.< =>
         s"""{"range": {"$fieldExpr": {"lt": ${filter.values(0)}}}}""".stripMargin
       case Relation.> =>
