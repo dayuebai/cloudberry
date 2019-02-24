@@ -68,7 +68,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     val result = query match {
       case q: Query => parseQuery(q, temporalSchemaMap)
       case q: CreateView => parseCreate(q, temporalSchemaMap)
-//      case q: AppendView => parseAppend(q, temporalSchemaMap)
+      case q: AppendView => parseAppend(q, temporalSchemaMap)
       case q: UpsertRecord => parseUpsert(q, schemaMap)
 //      case q: DropView => parseDrop(q, schemaMap)
 //      case q: DeleteRecord => parseDelete(q, schemaMap)
@@ -328,6 +328,9 @@ class ElasticsearchGenerator extends IQLGenerator {
           }
         val limit = select.limit
         val offset = select.offset
+
+        val source = select.fields.map(f => JsString(f.name))
+        println("source array is: " + source)
         println("limitStr: " + limit)
         println("offsetStr: " + offset)
 
@@ -338,6 +341,8 @@ class ElasticsearchGenerator extends IQLGenerator {
           shallowQueryAfterGroup += ("size" -> JsNumber(limit))
         if (offset != None)
           shallowQueryAfterGroup += ("from" -> JsNumber(offset))
+        if (source != None)
+          shallowQueryAfterGroup += ("_source" -> JsArray(source))
 
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterGroup)
       case None =>
