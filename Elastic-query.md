@@ -104,6 +104,11 @@ curl -X PUT "localhost:9200/twitter.ds_tweet" -H 'Content-Type: application/json
                "user.create_at" : { "type" : "date", "format": "strict_date" }
             }
        }
+    },
+    "settings": {
+        "index": {
+            "max_result_window": 2147483647
+        }
     }
 }
 '
@@ -414,65 +419,70 @@ limit 2147483647
 offset 0
 ```
 
+Elasticsearch:
+
 ```
 curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: application/json' -d'
 {"query":{"bool":{"must":[{"range":{"create_at":{"gte":"2016-05-05T00:00:11.000-0700","lt":"2016-08-24T00:00:11.000-0700","format":"strict_date_time"}}},{"terms":{"geo_tag.stateID":[37,51,24,11,10,34,42,9,44,48,35,4,40,6,20,32,8,49,12,22,28,1,13,45,5,47,21,29,54,17,18,39,19,55,26,27,31,56,41,46,16,30,53,38,25,36,50,33,23,2]}}]}},"sort":[{"create_at":{"order":"desc"}}],"size":2147483647,"from":0,"_source":["id","coordinate","place.bounding_box","create_at","user.id"]}'
 ```
 
-Return:
+AsterixDB response:
 ```
 [{"place.bounding_box":[[-98.778559,29.141956],[-98.302744,29.693046]],"user.id":313072248,"id":948775646850945024,"create_at":"2018-01-03T20:38:36.000Z"},{"place.bounding_box":[[-84.576827,33.647503],[-84.289385,33.886886]],"user.id":18482912,"id":948566704426307584,"create_at":"2018-01-03T06:48:20.000Z"},{"place.bounding_box":[[-96.736596,33.066464],[-96.608938,33.158169]],"user.id":4765186148,"id":948461848227143682,"create_at":"2018-01-02T23:51:40.000Z"},{"place.bounding_box":[[-88.070827,42.920822],[-87.863758,43.192623]],"user.id":30713421,"id":948368923698847749,"create_at":"2018-01-02T17:42:25.000Z"},
-
 {"place.bounding_box":[[-87.634643,24.396308],[-79.974307,31.001056]],"user.id":1344990402,"id":902997976657821696,"coordinate":[-81.46244135,28.4108609],"create_at":"2017-08-30T13:54:29.000Z"}]
 ```
+
+Elasticsearch response:
+
 ```
-      {
-        "_index" : "twitter.ds_tweet",
-        "_type" : "_doc",
-        "_id" : "728117023201316864",
-        "_score" : null,
-        "_source" : {
-          "coordinate" : "point(-80.7717 32.2233)",
-          "id" : 728117023201316864,
-          "place" : {
-            "bounding_box" : "LINESTRING(-83.353955 32.04683,-78.499301 35.215449)"
-          },
-          "create_at" : "2016-05-05T00:00:00.000-0800",
-          "user" : {
-            "id" : 4754740136
-          }
-        },
-        "sort" : [
-          1462435200000
-        ]
+{
+    "_index" : "twitter.ds_tweet",
+    "_type" : "_doc",
+    "_id" : "728117023201316864",
+    "_score" : null,
+    "_source" : {
+      "coordinate" : "point(-80.7717 32.2233)",
+      "id" : 728117023201316864,
+      "place" : {
+        "bounding_box" : "LINESTRING(-83.353955 32.04683,-78.499301 35.215449)"
+      },
+      "create_at" : "2016-05-05T00:00:00.000-0800",
+      "user" : {
+        "id" : 4754740136
       }
+    },
+    "sort" : [
+      1462435200000
+    ]
+}
 ```
-Append View bug
+
+
+
+# Query 8 Select (with pin map)
+
+AsterixDB:
+
 ```
-Start to generate query: AppendView(twitter.ds_tweet_56ab24c15b72a457069c5ea42fcfc640,Query(twitter.ds_tweet,List(),List(),List(FilterStatement(TimeField(create_at,false),None,inRange,List(2019-02-23T20:22:06.519-0800, 2019-02-23T20:52:09.670-0800)), FilterStatement(TextField(text,false),None,contains,List(happy))),List(),None,None,None,false))
-[error] a.a.LocalActorRefProvider(akka://application) - guardian failed, shutting down system
-scala.NotImplementedError: an implementation is missing
-	at scala.Predef$.$qmark$qmark$qmark(Predef.scala:230)
-	at edu.uci.ics.cloudberry.zion.model.impl.ElasticsearchGenerator.generate(ElasticsearchGenerator.scala:75)
-	at edu.uci.ics.cloudberry.zion.actor.ViewDataAgent$$anonfun$maintenanceWork$1.applyOrElse(ViewDataAgent.scala:25)
-	at scala.PartialFunction$OrElse.applyOrElse(PartialFunction.scala:171)
-	at akka.actor.Actor$class.aroundReceive(Actor.scala:482)
-	at edu.uci.ics.cloudberry.zion.actor.AbstractDataSetAgent.aroundReceive(AbstractDataSetAgent.scala:23)
-	at akka.actor.ActorCell.receiveMessage(ActorCell.scala:526)
-	at akka.actor.ActorCell.invoke(ActorCell.scala:495)
-	at akka.dispatch.Mailbox.processMailbox(Mailbox.scala:257)
-	at akka.dispatch.Mailbox.run(Mailbox.scala:224)
-[error] a.a.OneForOneStrategy - an implementation is missing
-scala.NotImplementedError: an implementation is missing
-	at scala.Predef$.$qmark$qmark$qmark(Predef.scala:230)
-	at edu.uci.ics.cloudberry.zion.model.impl.ElasticsearchGenerator.generate(ElasticsearchGenerator.scala:75)
-	at edu.uci.ics.cloudberry.zion.actor.ViewDataAgent$$anonfun$maintenanceWork$1.applyOrElse(ViewDataAgent.scala:25)
-	at scala.PartialFunction$OrElse.applyOrElse(PartialFunction.scala:171)
-	at akka.actor.Actor$class.aroundReceive(Actor.scala:482)
-	at edu.uci.ics.cloudberry.zion.actor.AbstractDataSetAgent.aroundReceive(AbstractDataSetAgent.scala:23)
-	at akka.actor.ActorCell.receiveMessage(ActorCell.scala:526)
-	at akka.actor.ActorCell.invoke(ActorCell.scala:495)
-	at akka.dispatch.Mailbox.processMailbox(Mailbox.scala:257)
-	at akka.dispatch.Mailbox.run(Mailbox.scala:224)
+
+```
+
+Elasticsearch:
+
+```
+
+``` 
+
+# Query 9 (Append View)
+
+AsterixDB:
+
+```
+
+```
+
+Elasticsearch:
+
+```
 
 ```

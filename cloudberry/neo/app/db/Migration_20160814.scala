@@ -64,6 +64,11 @@ private[db] class Migration_20160814() {
              |    }
              |  }
              |},
+             |"settings": {
+             |  "index": {
+             |    "max_result_window": 2147483647
+             |  }
+             |},
              |"method": "create",
              |"dataset": "berry.meta"
              |}

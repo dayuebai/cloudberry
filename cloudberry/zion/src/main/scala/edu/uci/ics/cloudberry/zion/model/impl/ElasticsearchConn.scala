@@ -201,7 +201,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
           //      println("sourceArray: " + sourceArray)
           if (jsonQuery.keys.contains("_source")) { // select bounding box / coordinate query will contains _source
             val returnArray = sourceArray.map(doc => parseSource(doc.value("_source").as[JsObject]))
-            println("HEATMAP RETURNS: " +  Json.toJson(returnArray))
+            println("HEATMAP/PINMAP RETURNS: " +  Json.toJson(returnArray))
             return Json.toJson(returnArray)
           }
 

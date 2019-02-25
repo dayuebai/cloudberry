@@ -68,7 +68,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     val result = query match {
       case q: Query => parseQuery(q, temporalSchemaMap)
       case q: CreateView => parseCreate(q, temporalSchemaMap)
-      case q: AppendView => parseAppend(q, temporalSchemaMap)
+//      case q: AppendView => parseAppend(q, temporalSchemaMap)
       case q: UpsertRecord => parseUpsert(q, schemaMap)
 //      case q: DropView => parseDrop(q, schemaMap)
 //      case q: DeleteRecord => parseDelete(q, schemaMap)
@@ -454,6 +454,8 @@ class ElasticsearchGenerator extends IQLGenerator {
         s"""{"range": {"$fieldExpr": {"lte": ${filter.values(0)}}}}""".stripMargin
       case Relation.>= =>
         s"""{"range": {"$fieldExpr": {"gte": ${filter.values(0)}}}}""".stripMargin
+      case Relation.== =>
+        s"""{"match": {"$fieldExpr": ${filter.values(0)}}}""".stripMargin
       case _ => throw new QueryParsingException("no supported parameter for this number in Elasticsearch")
     }
   }
