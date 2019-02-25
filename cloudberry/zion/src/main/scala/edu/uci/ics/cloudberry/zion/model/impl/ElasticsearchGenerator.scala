@@ -341,7 +341,7 @@ class ElasticsearchGenerator extends IQLGenerator {
           shallowQueryAfterGroup += ("size" -> JsNumber(limit))
         if (offset != None)
           shallowQueryAfterGroup += ("from" -> JsNumber(offset))
-        if (source != None)
+        if (source.nonEmpty)
           shallowQueryAfterGroup += ("_source" -> JsArray(source))
 
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterGroup)

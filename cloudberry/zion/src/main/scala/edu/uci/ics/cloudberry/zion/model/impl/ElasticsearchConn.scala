@@ -28,7 +28,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     }
   }
 
-  protected def postWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
+  private def postWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
     post(query).map { wsResponse =>
       val responseCode = wsResponse.status
       if (responseCode == 200 || responseCode == 400) {
@@ -43,7 +43,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     }
   }
 
-  def transactionWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
+ private def transactionWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
     println("CALL TRANSACTION POST")
     var jsonQuery = Json.parse(query).as[Seq[JsObject]]
     println("jsonQuery: " + jsonQuery)
@@ -139,12 +139,12 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     f
   }
 
-  protected def wsFailureHandler(query: String): PartialFunction[Throwable, Unit] = {
+  private def wsFailureHandler(query: String): PartialFunction[Throwable, Unit] = {
     case e: Throwable => Logger.error("WS ERROR:" + query, e)
       throw e
   }
 
-  protected def parseResponse(response: JsValue, query: String): JsValue = {
+  private def parseResponse(response: JsValue, query: String): JsValue = {
     val jsonQuery = Json.parse(query).as[JsObject]
     val jsonAggregation = (jsonQuery \ "aggregation" \ "func").getOrElse(JsNull)
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
@@ -199,6 +199,11 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
           val sourceArray = sourceJsValue.as[Seq[JsObject]]
           //      println("response: " + response)
           //      println("sourceArray: " + sourceArray)
+          if (jsonQuery.keys.contains("_source")) { // select bounding box / coordinate query will contains _source
+            val returnArray = sourceArray.map(doc => parseSource(doc.value("_source").as[JsObject]))
+            println("HEATMAP RETURNS: " +  Json.toJson(returnArray))
+            return Json.toJson(returnArray)
+          }
 
           val returnArray = sourceArray.map(doc => doc.value("_source"))
           Json.toJson(returnArray)
@@ -224,7 +229,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
   // Helper function: find the index of an element in an array in O(logN) time.
-  protected def binarySearch(arr: Seq[Int], x: Int): Int = {
+  private def binarySearch(arr: Seq[Int], x: Int): Int = {
     var left = 0
     var right = arr.length - 1
 
@@ -240,6 +245,33 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
       }
     }
     -1
+  }
+
+  // parse "_source" field in Elasticsearch response for heat map and pin map
+  private def parseSource(source: JsObject): JsValue = {
+    var returnSource = Json.obj()
+    source.keys.foreach(key => {
+      var curKey = key
+      var value = (source \ curKey).get
+      while (value.isInstanceOf[JsObject]) {
+        val tmp = value.as[JsObject]
+        curKey += "." + tmp.keys.head
+        value = tmp.values.head
+      }
+      val valueString = value.toString().stripPrefix("\"").stripSuffix("\"")
+      if (valueString.startsWith("point")) {
+        val arrString = "[" + valueString.stripPrefix("point(").stripSuffix(")").replace(" ", ",") + "]"
+        returnSource += (curKey -> Json.parse(arrString))
+      }
+      else if (valueString.startsWith("LINESTRING")) {
+        val arrString = "[[" + valueString.stripPrefix("LINESTRING(").stripSuffix(")").replace(",", "],[").replace(" ", ",") + "]]"
+        returnSource += (curKey -> Json.parse(arrString))
+      }
+      else{
+        returnSource += (curKey -> value)
+      }
+    })
+    returnSource
   }
 }
 
