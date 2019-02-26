@@ -68,7 +68,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     val result = query match {
       case q: Query => parseQuery(q, temporalSchemaMap)
       case q: CreateView => parseCreate(q, temporalSchemaMap)
-//      case q: AppendView => parseAppend(q, temporalSchemaMap)
+      case q: AppendView => parseAppend(q, temporalSchemaMap)
       case q: UpsertRecord => parseUpsert(q, schemaMap)
 //      case q: DropView => parseDrop(q, schemaMap)
 //      case q: DeleteRecord => parseDelete(q, schemaMap)
@@ -86,7 +86,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-  protected def genProperties(schema: AbstractSchema): JsObject = {
+  private def genProperties(schema: AbstractSchema): JsObject = {
     var properties = Json.obj()
     // TODO: user.create has time format: strict_date (in Elasticsearch)
     schema.fieldMap.values.filter(f => f.dataType == DataType.Time).foreach(
@@ -96,12 +96,13 @@ class ElasticsearchGenerator extends IQLGenerator {
     properties
   }
 
-  def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
+  private def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
     println("Call parseQuery")
     println("parseQuery query: " + query)
     var queryBuilder = Json.obj()
 
     val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
+    val isSelectGroupBy = isSelectGroupBy(query.select, query.groups)
 //    println("SchemaMap: " + schemaMap)
 //    println("ExprMap: " + exprMap)
 
@@ -118,7 +119,7 @@ class ElasticsearchGenerator extends IQLGenerator {
 
     val (resultAfterAppend, queryAfterAppend) = parseAppend(query.append, resultAfterFilter.exprMap, queryAfterFilter)
 
-    val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, resultAfterAppend.exprMap, queryAfterAppend)
+    val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, query.select, resultAfterAppend.exprMap, queryAfterAppend)
 
     val (resultAfterSelect, queryAfterSelect) = parseSelect(query.select, resultAfterGroup.exprMap, query, queryAfterGroup)
 
@@ -128,7 +129,7 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   }
 
-  def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
+  private def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
     println("Call parseCreate")
     val dataset = create.dataset
     val sourceSchema = schemaMap(create.query.dataset)
@@ -158,13 +159,13 @@ class ElasticsearchGenerator extends IQLGenerator {
     resQueryArray.toString()
   }
 
-  protected def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = {
+  private def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = {
     println("Call parseAppend")
     println("append: " + append)
     return ""
   }
 
-  def parseUpsert(q: UpsertRecord, schemaMap: Map[String, AbstractSchema]): String = {
+  private def parseUpsert(q: UpsertRecord, schemaMap: Map[String, AbstractSchema]): String = {
     println("Call parseUpsert")
     var queryBuilder = Json.obj()
     var recordBuilder = Json.arr()
@@ -191,17 +192,16 @@ class ElasticsearchGenerator extends IQLGenerator {
     queryBuilder.toString()
   }
 
-//  protected def parseDrop(query: DropView, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Call parseDrop")
-//    return ""
-//  }
-//
-//  protected def parseDelete(delete: DeleteRecord, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Call parseDelete")
-//    return ""
-//  }
-//
-  // Private
+  protected def parseDrop(query: DropView, schemaMap: Map[String, AbstractSchema]): String = {
+    println("Call parseDrop")
+    return ""
+  }
+
+  protected def parseDelete(delete: DeleteRecord, schemaMap: Map[String, AbstractSchema]): String = {
+    println("Call parseDelete")
+    return ""
+  }
+
   private def parseUnnest(unnest: Seq[UnnestStatement],
                           exprMap: Map[String, FieldExpr], queryAfterLookup: JsObject): (ParsedResult, JsObject) = {
     (ParsedResult(Seq.empty, exprMap), queryAfterLookup)
@@ -229,6 +229,7 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseGroupby(groupOpt: Option[GroupStatement],
+                           selectOpt: Option[SelectStatement],
                            exprMap: Map[String, FieldExpr],
                            queryAfterAppend: JsObject): (ParsedResult, JsObject) = {
     var shallowQueryAfterAppend = queryAfterAppend
@@ -246,7 +247,6 @@ class ElasticsearchGenerator extends IQLGenerator {
             groupStr.append(s"""{"$as": {""")
           else
             groupStr.append(s""","aggs": {"$as": {""")
-
           by.funcOpt match {
             case Some(func) =>
               func match {
@@ -254,7 +254,7 @@ class ElasticsearchGenerator extends IQLGenerator {
                 case interval: Interval => // assume has time field
                   val duration = parseIntervalDuration(interval)
                   groupStr.append(s""" "date_histogram": {"field": "${by.field.name}", "interval": "$duration"} """.stripMargin)
-                case level: Level =>
+                case level: Level => {
                   val hierarchyField = by.field.asInstanceOf[HierarchyField]
                   val field = hierarchyField.levels.find(_._1 == level.levelTag).get._2
                   if (group.lookups.isEmpty) {
@@ -263,12 +263,15 @@ class ElasticsearchGenerator extends IQLGenerator {
                   else { // hard coded sequence for later joins
                     groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "order": {"_key":"asc"}} """.stripMargin)
                   }
+                }
                 case GeoCellTenth => ???
                 case GeoCellTenth => ???
                 case GeoCellHundredth => ???
                 case _ => throw new QueryParsingException(s"unknown function: ${func.name}")
               }
-            case None => ???
+            case None => {
+
+            }
           }
         }
         groupStr.append("}" * group.bys.length * 2)
@@ -391,7 +394,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     (ParsedResult(Seq.empty, exprMap), shallowQueryAfterSelect)
   }
 
-  protected def initExprMap(dataset: String, schemaMap: Map[String, AbstractSchema]): Map[String, FieldExpr] = {
+  private def initExprMap(dataset: String, schemaMap: Map[String, AbstractSchema]): Map[String, FieldExpr] = {
     // Type of val schema: Schema
     val schema = schemaMap(dataset)
     schema.fieldMap.mapValues { f =>
@@ -405,7 +408,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-  protected def parseFilterRelation(filter: FilterStatement, fieldExpr: String): String = {
+  private def parseFilterRelation(filter: FilterStatement, fieldExpr: String): String = {
     if ((filter.relation == Relation.isNull || filter.relation == Relation.isNotNull) &&
         filter.field.dataType != DataType.Bag && filter.field.dataType != DataType.Hierarchy) {
 //      if (filter.relation == Relation.isNull)
@@ -437,7 +440,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-  protected def parseNumberRelation(filter: FilterStatement, fieldExpr: String): String = {
+  private def parseNumberRelation(filter: FilterStatement, fieldExpr: String): String = {
     filter.relation match {
       case Relation.inRange =>
         if (filter.values.size != 2) throw new QueryParsingException(s"relation: ${filter.relation} requires two parameters")
@@ -460,7 +463,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-  protected def parseTimeRelation(filter: FilterStatement, fieldExpr: String): String = {
+  private def parseTimeRelation(filter: FilterStatement, fieldExpr: String): String = {
     filter.relation match {
       case Relation.inRange => {
         s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "lt": "${filter.values(1)}", "format": "strict_date_time" }}}""".stripMargin
@@ -481,20 +484,20 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-  protected def parsePointRelation(filter: FilterStatement, fieldExpr: String): String = {
+  private def parsePointRelation(filter: FilterStatement, fieldExpr: String): String = {
     ""
   }
 
-  protected def parseStringRelation(filter: FilterStatement, fieldExpr: String): String = {
+  private def parseStringRelation(filter: FilterStatement, fieldExpr: String): String = {
     ""
   }
 
-  protected def parseTextRelation(filter: FilterStatement, fieldExpr: String): String = {
+  private def parseTextRelation(filter: FilterStatement, fieldExpr: String): String = {
     val words = filter.values.map(w => s"${w.asInstanceOf[String].trim()}").mkString("\"", ",", "\"")
     s"""{"match": {"${fieldExpr}": {"query": $words, "operator": "and"}}}"""
   }
 
-  protected def parseIntervalDuration(interval: Interval): String = {
+  private def parseIntervalDuration(interval: Interval): String = {
     import TimeUnit._
     interval.unit match {
       case Second => "second"

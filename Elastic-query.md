@@ -463,14 +463,66 @@ Elasticsearch response:
 
 AsterixDB:
 
+Group by `tag`:
+```
+QUERY: select `tag` as `tag`,coll_count(g) as `count`
+from twitter.ds_tweet_56609ab6ba04048adc2cbfafbe745e10 t
+unnest t.`hashtags` `unnest0`
+where not(is_null(t.`hashtags`)) and t.`create_at` >= datetime('2017-01-24T08:00:00.000Z') and t.`create_at` < datetime('2018-01-04T08:00:00.000Z') and t.`geo_tag`.`stateID` in [ 37,51,24,11,10,34,42,9,44,48,35,4,40,6,20,32,8,49,12,22,28,1,13,45,5,47,21,29,54,17,18,39,19,55,26,27,31,56,41,46,16,30,53,38,25,36,50,33,23,2 ]
+group by `unnest0` as `tag` group as g
+order by `count` desc
+limit 50
+offset 0
 ```
 
+Group by month and select `unnest0`
+```
+QUERY: select `month` as `month`,coll_count(g) as `count`
+from twitter.ds_tweet_56609ab6ba04048adc2cbfafbe745e10 t
+unnest t.`hashtags` `unnest0`
+where not(is_null(t.`hashtags`)) and t.`create_at` >= datetime('2017-01-24T08:00:00.000Z') and t.`create_at` < datetime('2018-01-04T08:00:00.000Z') and t.`geo_tag`.`stateID` in [ 37,51,24,11,10,34,42,9,44,48,35,4,40,6,20,32,8,49,12,22,28,1,13,45,5,47,21,29,54,17,18,39,19,55,26,27,31,56,41,46,16,30,53,38,25,36,50,33,23,2 ] and `unnest0`="MakeupByMadison"
+group by get_interval_start_datetime(interval_bin(t.`create_at`, datetime('1990-01-01T00:00:00.000Z'),  year_month_duration("P1M") )) as `month` group as g
 ```
 
 Elasticsearch:
 
 ```
-
+curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: application/json' -d'
+{
+    "size": 0,
+    "query": {
+        "bool": {
+            "must": [
+            {
+                "range": {
+                    "create_at": {
+                        "gte": "2015-01-27T15:04:19.068-0800",
+                        "lte": "2019-01-28T15:04:19.068-0800",
+                        "format": "strict_date_time"
+                    }
+                }
+            },
+            {
+                "terms": {
+                    "geo_tag.stateID": [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 56]
+                }
+            }]
+        }
+    },
+    "aggs": {
+        "hashtags": {
+            "terms": {
+                "size": 50,
+                "field": "hashtags.keyword",
+                "min_doc_count": 1,
+                "order": {
+                  "_count": "desc"
+                }
+            }
+        }
+    }
+}
+'
 ``` 
 
 # Query 9 (Append View)
