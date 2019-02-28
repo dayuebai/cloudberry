@@ -150,8 +150,9 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
     val jsonGroupAsList = (jsonQuery \ "groupAsList").getOrElse(JsNull)
     val joinSelectField = (jsonQuery \ "joinSelectField").getOrElse(JsNull)
-
+    println("json group as list: " + jsonGroupAsList)
     if (jsonGroupAsList != JsNull) {
+      println("jsongroupaslist EXISTS")
       var resArray = Json.arr()
       val groupAsList = jsonGroupAsList.as[Seq[String]]
 
@@ -175,16 +176,28 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         }
       }
       else {
+        println("ELSE.............")
         val buckets: Seq[JsObject] = (response \ "aggregations" \ groupAsList.head \ "buckets").get.as[Seq[JsObject]]
-        for (bucket <- buckets) {
-          val keyValue = (bucket \ "key").get.as[Int]
-          val liquid: Seq[JsObject] = (bucket \ groupAsList.last \ "buckets").get.as[Seq[JsObject]]
-          for (drop <- liquid) {
+        for (bucket <- buckets) { // TODO: Refactor loop structure
+          val keyValue = (bucket \ "key").get
+          val jsLiquid = (bucket \ groupAsList.last \ "buckets").getOrElse(JsNull)
+          println("liquid: " + jsLiquid)
+          if (jsLiquid != JsNull) {
+            val liquid = jsLiquid.as[Seq[JsObject]]
+            for (drop <- liquid) {
+              var tmp_json = Json.obj()
+              tmp_json += (groupAsList.head -> keyValue)
+              tmp_json += (groupAsList.last -> JsString((drop \ "key_as_string").get.as[String]))
+              tmp_json += ("count" -> JsNumber((drop \ "doc_count").get.as[Int]))
+              resArray = resArray.append(tmp_json)
+            }
+          }
+          else {
             var tmp_json = Json.obj()
-            tmp_json += (groupAsList.head -> JsNumber(keyValue))
-            tmp_json += (groupAsList.last -> JsString((drop \ "key_as_string").get.as[String]))
-            tmp_json += ("count" -> JsNumber((drop \ "doc_count").get.as[Int]))
+            tmp_json += (groupAsList.head -> keyValue)
+            tmp_json += ("count" -> JsNumber((bucket \ "doc_count").get.as[Int]))
             resArray = resArray.append(tmp_json)
+//            println("....resarray is: " + resArray)
           }
         }
       }

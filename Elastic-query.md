@@ -514,7 +514,6 @@ curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: a
             "terms": {
                 "size": 50,
                 "field": "hashtags.keyword",
-                "min_doc_count": 1,
                 "order": {
                   "_count": "desc"
                 }
