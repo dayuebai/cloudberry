@@ -32,7 +32,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     post(query).map { wsResponse =>
       val responseCode = wsResponse.status
       if (responseCode == 200 || responseCode == 400) {
-        println("Query succeeded")
+//        println("Query succeeded")
         // Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
         succeedHandler(wsResponse, query)
       }
@@ -44,19 +44,19 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   }
 
  private def transactionWithCheckingStatus(query: String, succeedHandler: (WSResponse) => Boolean, failureHandler: (WSResponse) => Boolean): Future[Boolean] = {
-    println("CALL TRANSACTION POST")
+//    println("CALL TRANSACTION POST")
     var jsonQuery = Json.parse(query).as[Seq[JsObject]]
-    println("jsonQuery: " + jsonQuery)
+//    println("jsonQuery: " + jsonQuery)
 
     while (jsonQuery.length != 1) {
       val headQuery = jsonQuery.head.toString()
       jsonQuery = jsonQuery.drop(1)
-      println("headQuery: " + headQuery)
-      println("after drop, jsonquery is: " + jsonQuery)
+//      println("headQuery: " + headQuery)
+//      println("after drop, jsonquery is: " + jsonQuery)
 
       val c = post(headQuery).map { wsResponse =>
         val responseCode = wsResponse.status
-        println("multi post Query, status code: " + responseCode + " query: " + headQuery)
+//        println("multi post Query, status code: " + responseCode + " query: " + headQuery)
       }
       Await.ready(c, Duration.Inf)
     }
@@ -64,11 +64,11 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val r = post(jsonQuery.head.toString()).map { wsResponse =>
       val responseCode = wsResponse.status
       if (responseCode == 200) {
-        Logger.info("FINISH TRANSACTION")
+//        Logger.info("FINISH TRANSACTION")
         succeedHandler(wsResponse)
       }
       else{
-        Logger.info("TRANSACTION POST QUERY FAILED: " + Json.prettyPrint(wsResponse.json))
+//        Logger.info("TRANSACTION POST QUERY FAILED: " + Json.prettyPrint(wsResponse.json))
         failureHandler(wsResponse)
       }
     }
@@ -99,7 +99,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         case "count" => "?filter_path=hits.total"
         case "min" | "max" => {
           val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
-          println(s"""?size=0&filter_path=aggregations.$asField.value_as_string""")
+//          println(s"""?size=0&filter_path=aggregations.$asField.value_as_string""")
           s"""?size=0&filter_path=aggregations.$asField.value_as_string"""
         }
         case _ => ???
@@ -113,18 +113,18 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     jsonQuery -= "selectFields"
     jsonQuery -= "joinTermsFilter"
 
-    Logger.info("Query: " + query)
-    Logger.info("method: " + method)
-    Logger.info("dataset: " + dataset)
-    Logger.info("aggregation: " + aggregation)
-    Logger.info("jsonQuery: " + jsonQuery.toString())
+//    Logger.info("Query: " + query)
+//    Logger.info("method: " + method)
+//    Logger.info("dataset: " + dataset)
+//    Logger.info("aggregation: " + aggregation)
+//    Logger.info("jsonQuery: " + jsonQuery.toString())
 
     val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
       case "search" => wSClient.url(queryURL + "/_search" + filterPath).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
       case "msearch" => {
         val queries = (jsonQuery \ "queries").get.as[List[JsValue]].mkString("", "\n", "\n") // Queries must be terminated by a new line character
-        println("QUERIES: " + queries)
+//        println("QUERIES: " + queries)
         wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(queries)
       }
       case "upsert" => {
@@ -133,7 +133,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
       }
       case "drop" => wSClient.url(queryURL).withRequestTimeout(Duration.Inf).delete()
       case "reindex" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).post(jsonQuery)
-      case _ => {println("NO MATCH METHOD"); ???}
+      case _ => ???
     }
     f.onFailure(wsFailureHandler(query))
     f
@@ -150,9 +150,9 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     val aggregation = if (jsonAggregation != JsNull) jsonAggregation.toString().stripPrefix("\"").stripSuffix("\"") else ""
     val jsonGroupAsList = (jsonQuery \ "groupAsList").getOrElse(JsNull)
     val joinSelectField = (jsonQuery \ "joinSelectField").getOrElse(JsNull)
-    println("json group as list: " + jsonGroupAsList)
+//    println("json group as list: " + jsonGroupAsList)
     if (jsonGroupAsList != JsNull) {
-      println("jsongroupaslist EXISTS")
+//      println("jsongroupaslist EXISTS")
       var resArray = Json.arr()
       val groupAsList = jsonGroupAsList.as[Seq[String]]
 
@@ -176,12 +176,10 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         }
       }
       else {
-        println("ELSE.............")
         val buckets: Seq[JsObject] = (response \ "aggregations" \ groupAsList.head \ "buckets").get.as[Seq[JsObject]]
         for (bucket <- buckets) { // TODO: Refactor loop structure
-          val keyValue = (bucket \ "key").get
+          val keyValue = if (bucket.keys.contains("key_as_string")) (bucket \ "key_as_string").get else (bucket \ "key").get
           val jsLiquid = (bucket \ groupAsList.last \ "buckets").getOrElse(JsNull)
-          println("liquid: " + jsLiquid)
           if (jsLiquid != JsNull) {
             val liquid = jsLiquid.as[Seq[JsObject]]
             for (drop <- liquid) {
@@ -197,11 +195,10 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
             tmp_json += (groupAsList.head -> keyValue)
             tmp_json += ("count" -> JsNumber((bucket \ "doc_count").get.as[Int]))
             resArray = resArray.append(tmp_json)
-//            println("....resarray is: " + resArray)
           }
         }
       }
-      println("resArray is: " + resArray)
+//      println("resArray is: " + resArray)
       return resArray
     }
 
@@ -214,7 +211,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
           //      println("sourceArray: " + sourceArray)
           if (jsonQuery.keys.contains("_source")) { // select bounding box / coordinate query will contains _source
             val returnArray = sourceArray.map(doc => parseSource(doc.value("_source").as[JsObject]))
-            println("HEATMAP/PINMAP RETURNS: " +  Json.toJson(returnArray))
+//            println("HEATMAP/PINMAP RETURNS: " +  Json.toJson(returnArray))
             return Json.toJson(returnArray)
           }
 
@@ -226,15 +223,15 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
       case "count" => { // Aggregation (function: count)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
         val count = (response.asInstanceOf[JsObject] \ "hits" \ "total").get.as[JsNumber]
-        println(Json.arr(Json.obj(asField -> count)))
+//        println(Json.arr(Json.obj(asField -> count)))
         Json.arr(Json.obj(asField -> count))
       }
       case "min" | "max" => { // Aggregation (function: min/max)
-        println("min/max response: " + response)
+//        println("min/max response: " + response)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
         val res = (response.asInstanceOf[JsObject] \ "aggregations" \ asField \ "value_as_string").get.as[JsString]
         val jsonObjRes = Json.obj(asField -> res)
-        println(s"$asField return: " + Json.arr(jsonObjRes))
+//        println(s"$asField return: " + Json.arr(jsonObjRes))
         Json.arr(jsonObjRes)
       }
       case _ => ??? // Unmatched
