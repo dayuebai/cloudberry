@@ -97,8 +97,8 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
-//    println("Call parseQuery")
-//    println("parseQuery query: " + query)
+    println("Call parseQuery")
+    println("parseQuery query: " + query)
     var queryBuilder = Json.obj()
 
     val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
@@ -153,7 +153,7 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = { // TODO: Reproduce & Test
-//    println("Call parseAppend")
+    println("Call parseAppend")
     val selectStatement = Json.parse(parseQuery(append.query, schemaMap)).as[JsObject]
     var source = Json.obj()
     source += ("index" -> JsString(append.query.dataset))

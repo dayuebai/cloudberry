@@ -113,11 +113,11 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     jsonQuery -= "selectFields"
     jsonQuery -= "joinTermsFilter"
 
-//    Logger.info("Query: " + query)
-//    Logger.info("method: " + method)
-//    Logger.info("dataset: " + dataset)
-//    Logger.info("aggregation: " + aggregation)
-//    Logger.info("jsonQuery: " + jsonQuery.toString())
+    Logger.info("Query: " + query)
+    Logger.info("method: " + method)
+    Logger.info("dataset: " + dataset)
+    Logger.info("aggregation: " + aggregation)
+    Logger.info("jsonQuery: " + jsonQuery.toString())
 
     val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
@@ -198,7 +198,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
           }
         }
       }
-//      println("resArray is: " + resArray)
+      println("resArray is: " + resArray)
       return resArray
     }
 
@@ -227,12 +227,28 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         Json.arr(Json.obj(asField -> count))
       }
       case "min" | "max" => { // Aggregation (function: min/max)
-//        println("min/max response: " + response)
+        println("min/max response: " + response)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
-        val res = (response.asInstanceOf[JsObject] \ "aggregations" \ asField \ "value_as_string").get.as[JsString]
-        val jsonObjRes = Json.obj(asField -> res)
-//        println(s"$asField return: " + Json.arr(jsonObjRes))
-        Json.arr(jsonObjRes)
+//        if (bucket.keys.contains("key_as_string")) (bucket \ "key_as_string").get else (bucket \ "key").get
+
+        if (response.as[JsObject].keys.nonEmpty) {
+          val min_obj = (response \ "aggregations" \ asField).as[JsObject]
+          val res = if (min_obj.keys.contains("value_as_string")) (min_obj \ "value_as_string").getOrElse(JsNull) else (min_obj \ "value").get
+
+          if (res != JsNull) {
+            val jsonObjRes = Json.obj(asField -> res)
+            println(s"$asField return: " + Json.arr(jsonObjRes))
+            return Json.arr(jsonObjRes)
+          }
+        }
+
+        // TODO: how to handle empty response in aggregation?
+//          [error] e.u.i.c.z.a.DataStoreManager - collectStats error: java.util.NoSuchElementException: head of empty list
+
+//        println(s"$asField return: " + Json.arr(Json.obj(asField -> JsString(""))))
+//        Json.arr(Json.obj(asField -> JsString("")))
+        println(s"$asField return: " + Json.arr())
+        Json.arr()
       }
       case _ => ??? // Unmatched
     }
