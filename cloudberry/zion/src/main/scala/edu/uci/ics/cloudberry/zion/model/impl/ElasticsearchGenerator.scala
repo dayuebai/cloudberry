@@ -2,7 +2,6 @@ package edu.uci.ics.cloudberry.zion.model.impl
 
 import edu.uci.ics.cloudberry.zion.model.datastore.{IQLGenerator, IQLGeneratorFactory, QueryParsingException}
 import edu.uci.ics.cloudberry.zion.model.schema._
-import org.joda.time.DateTime
 
 import play.api.libs.json._
 
@@ -97,7 +96,6 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
-    println("Call parseQuery")
     println("parseQuery query: " + query)
     var queryBuilder = Json.obj()
 
@@ -110,9 +108,7 @@ class ElasticsearchGenerator extends IQLGenerator {
 
     val (resultAfterFilter, queryAfterFilter) = parseFilter(query.filter, exprMapAfterUnnest, queryBuilder)
 
-    val (resultAfterAppend, queryAfterAppend) = parseAppend(query.append, resultAfterFilter.exprMap, queryAfterFilter)
-
-    val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, query.unnest, query.select, resultAfterAppend.exprMap, queryAfterAppend)
+    val (resultAfterGroup, queryAfterGroup) = parseGroupby(query.groups, query.unnest, query.select, resultAfterFilter.exprMap, queryAfterFilter)
 
     val (resultAfterSelect, queryAfterSelect) = parseSelect(query.select, query.groups, resultAfterGroup.exprMap, queryAfterGroup)
 
@@ -148,7 +144,6 @@ class ElasticsearchGenerator extends IQLGenerator {
     reindexStatement += ("dest" -> dest)
 
     val resQueryArray = Json.arr(dropStatement, createStatement, reindexStatement)
-//    println("resQueryArray: " + resQueryArray)
     resQueryArray.toString()
   }
 
@@ -164,7 +159,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     reindexStatement += ("method" -> JsString("reindex"))
     reindexStatement += ("source" -> source)
     reindexStatement += ("dest" -> dest)
-
+    println("parseAppend returns: " + reindexStatement.toString())
     reindexStatement.toString()
   }
 
@@ -232,10 +227,6 @@ class ElasticsearchGenerator extends IQLGenerator {
 
       (ParsedResult(Seq.empty, exprMap), shallowQuery)
     }
-  }
-
-  private def parseAppend(appends: Seq[AppendStatement], exprMap: Map[String, FieldExpr], queryAfterFilter: JsObject): (ParsedResult, JsObject) = {
-    (ParsedResult(Seq.empty, exprMap), queryAfterFilter)
   }
 
   private def parseGroupby(groupOpt: Option[GroupStatement],
@@ -327,16 +318,16 @@ class ElasticsearchGenerator extends IQLGenerator {
                           exprMap: Map[String, FieldExpr],
                           queryAfterGroup: JsObject): (ParsedResult, JsObject) = {
     var shallowQueryAfterGroup = queryAfterGroup
-    if (!groupOpt.isDefined && selectOpt.isDefined) {
+    if (groupOpt.isEmpty && selectOpt.nonEmpty) {
       val select = selectOpt.get
       val orderStrs = select.orderOn.zip(select.order).map {
         case (orderOn, order) =>
           val expr = orderOn.name
           val orderStr = if (order == SortOrder.DSC) "desc" else "asc"
-          s"""|{"$expr": {"order": "$orderStr"}}""".stripMargin
+          s"""{"$expr": {"order": "$orderStr"}}"""
       }
       val orderStr =
-        if (!orderStrs.isEmpty) {
+        if (orderStrs.nonEmpty) {
           orderStrs.mkString("[", ",", "]")
         } else {
           ""
@@ -345,12 +336,8 @@ class ElasticsearchGenerator extends IQLGenerator {
       val offset = select.offset
 
       val source = select.fields.map(f => JsString(f.name))
-//      println("source array is: " + source)
-//      println("limitStr: " + limit)
-//      println("offsetStr: " + offset)
 
-
-      if (!orderStr.isEmpty())
+      if (orderStr.nonEmpty)
         shallowQueryAfterGroup += ("sort" -> Json.parse(orderStr))
       if (limit != None)
         shallowQueryAfterGroup += ("size" -> JsNumber(limit))

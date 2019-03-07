@@ -31,9 +31,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
   private def postWithCheckingStatus[T](query: String, succeedHandler: (WSResponse, String) => T, failureHandler: WSResponse => T): Future[T] = {
     post(query).map { wsResponse =>
       val responseCode = wsResponse.status
-      if (responseCode == 200 || responseCode == 400) {
-//        println("Query succeeded")
-        // Logger.info("Query succeeded: " + Json.prettyPrint(wsResponse.json))
+      if (responseCode == 200 || responseCode == 400) { // Create existing table results in status code: 400
         succeedHandler(wsResponse, query)
       }
       else {

@@ -1,3 +1,71 @@
+# Data Preparation
+
+
+# Query
+
+## Create Index
+
+AsterixDB:
+```
+create dataverse berry if not exists;
+```
+
+Elasticsearch:
+```
+curl -X PUT "localhost:9200/berry.meta" -H 'Content-Type: application/json' -d'
+{
+  "mappings" : {
+    "_doc" : {
+      "properties" : {  
+        "dataInterval.start" : { "type" : "date", "format": "strict_date_time" },
+        "dataInterval.end": { "type" : "date", "format": "strict_date_time" },
+        "stats.createTime": { "type" : "date", "format": "strict_date_time" },
+        "stats.lastModifyTime": { "type" : "date", "format": "strict_date_time" },
+        "stats.lastReadTime": { "type" : "date", "format": "strict_date_time" }
+      }
+    }
+  },
+  "settings": {
+  	"index": {
+  		"max_result_window": 2147483647
+  	}
+  }
+}
+'
+```
+
+In Elasticsearch, creating existing index results in status code: `400`. Creating non-existing index results in status code: `200`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Count documents in index
 
 `curl -X GET "localhost:9200/twitter.dscountypopulation/_doc/_count"`
@@ -65,32 +133,7 @@ curl -X PUT "http://localhost:9200/twitter.dscitypopulation/_settings" -H 'Conte
 curl -X PUT "http://localhost:9200/twitter.ds_tweet/_settings" -H 'Content-Type: application/json' -d '{ "index" : { "max_result_window" : 2147483647 } }'
 ```
 
-# Create Index
 
-create berry.meta
-
-```
-curl -X PUT "localhost:9200/test" -H 'Content-Type: application/json' -d'
-{
-  "mappings" : {
-    "_doc" : {
-      "properties" : {  
-        "dataInterval.start" : { "type" : "date", "format": "strict_date_time" },
-        "dataInterval.end": { "type" : "date", "format": "strict_date_time" },
-        "stats.createTime": { "type" : "date", "format": "strict_date_time" },
-        "stats.lastModifyTime": { "type" : "date", "format": "strict_date_time" },
-        "stats.lastReadTime": { "type" : "date", "format": "strict_date_time" }
-      }
-    }
-  },
-  "settings": {
-  	"index": {
-  		"max_result_window": 2147483647
-  	}
-  }
-}
-'
-```
 
 create twitter.ds_tweet
 
