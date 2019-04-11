@@ -20,6 +20,7 @@ object TwitterJSONTagToADM {
   var threadNumber = 2
   var isDebug = false
   val bufferSize = 100
+  var file = "ADM" // By default, generate ADM file.
 
   val usage =
     """
@@ -36,14 +37,20 @@ object TwitterJSONTagToADM {
       case "-city" :: value :: tail => shapeMap += CityLevel -> value; parseOption(tail)
       case "-thread" :: value :: tail => threadNumber = value.toInt; parseOption(tail)
       case "-debug" :: value :: tail => isDebug = true; parseOption(tail)
+      case "-fileFormat" :: value :: tail => file = value; parseOption(tail)
       case option :: tail => System.err.println("unknown option:" + option); System.err.println(usage); System.exit(1);
     }
   }
 
   def tagOneTweet(ln: String, usGeoGnosis: USGeoGnosis) = {
     try {
-      val adm = Tweet.toADM(TwitterObjectFactory.createStatus(ln), usGeoGnosis, true)
-      if (adm.length > 0) println(adm)
+      if (file.equals("ADM")) {
+        val adm = Tweet.toADM(TwitterObjectFactory.createStatus(ln), usGeoGnosis, true)
+        if (adm.length > 0) println(adm)
+      } else {
+        val json = Tweet.toJSON(TwitterObjectFactory.createStatus(ln), usGeoGnosis, true)
+        if (json.length > 0) println(json)
+      }
     } catch {
       case e: Throwable => {
         if (isDebug) {
@@ -56,6 +63,7 @@ object TwitterJSONTagToADM {
 
   //TODO make a parallel version of this one
   def main(args: Array[String]): Unit = {
+//    println("Args: " + args.toString());
     parseOption(args.toList)
     val usGeoGnosis = profile("loading resource") {
       new USGeoGnosis(shapeMap.mapValues(new File(_)).toMap)
