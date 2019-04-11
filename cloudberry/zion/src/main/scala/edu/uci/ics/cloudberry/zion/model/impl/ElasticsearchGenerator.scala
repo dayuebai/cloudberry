@@ -30,7 +30,6 @@ object ElasticImpl extends ElasticImpl {
     Min -> "min",
     Avg -> "avg",
     Sum -> "sum"
-    // implement distinct_count, topK later
   )
 }
 
@@ -87,16 +86,14 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   private def genProperties(schema: AbstractSchema): JsObject = {
     var properties = Json.obj()
-    // TODO: user.create has time format: strict_date (in Elasticsearch)
     schema.fieldMap.values.filter(f => f.dataType == DataType.Time).foreach(
       f => {properties += (f.name -> Json.parse("""{ "type" : "date", "format": "strict_date_time" }"""))}
     )
-//    println("properties: " + properties)
     properties
   }
 
   private def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
-    println("parseQuery query: " + query)
+//    println("parseQuery query: " + query)
     var queryBuilder = Json.obj()
 
     val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
@@ -147,8 +144,8 @@ class ElasticsearchGenerator extends IQLGenerator {
     resQueryArray.toString()
   }
 
-  private def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = { // TODO: Reproduce & Test
-    println("Call parseAppend")
+  private def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = {
+//    println("Call parseAppend")
     val selectStatement = Json.parse(parseQuery(append.query, schemaMap)).as[JsObject]
     var source = Json.obj()
     source += ("index" -> JsString(append.query.dataset))
@@ -159,7 +156,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     reindexStatement += ("method" -> JsString("reindex"))
     reindexStatement += ("source" -> source)
     reindexStatement += ("dest" -> dest)
-    println("parseAppend returns: " + reindexStatement.toString())
+//    println("parseAppend returns: " + reindexStatement.toString())
     reindexStatement.toString()
   }
 
@@ -301,7 +298,6 @@ class ElasticsearchGenerator extends IQLGenerator {
           multiSearchQuery += ("joinSelectField" -> JsString(body.selectValues.head.name))
           multiSearchQuery += ("joinTermsFilter" -> Json.toJson(joinTermsFilter))
 
-//          println("multiSearchQuery: " + multiSearchQuery.toString())
           return (ParsedResult(Seq.empty, exprMap), multiSearchQuery)
         }
 
@@ -371,14 +367,6 @@ class ElasticsearchGenerator extends IQLGenerator {
             shallowQueryAfterSelect += ("size" -> JsNumber(0))
             shallowQueryAfterSelect += ("aggs" -> Json.obj( as -> Json.obj(funcName -> Json.obj("field" -> JsString(field)))))
           }
-          // NOT USED IN TWITTERMAP
-          case Sum => ???
-
-          case Avg => ???
-
-          case DistinctCount => ???
-
-          case topK => ???
         }
         shallowQueryAfterSelect
       case None =>
@@ -406,10 +394,7 @@ class ElasticsearchGenerator extends IQLGenerator {
       case DataType.Text => parseTextRelation(filter, fieldExpr)
       case DataType.Number => parseNumberRelation(filter, fieldExpr)
       case DataType.String => parseStringRelation(filter, fieldExpr)
-      case DataType.Point => ???
-      case DataType.Boolean => ???
-      case DataType.Bag => ???
-      case DataType.Hierarchy => throw new QueryParsingException("the Hierarchy type doesn't support any relations.")
+      case DataType.Hierarchy => throw new QueryParsingException("the Hierarchy type doesn't support any relation.")
       case _ => throw new QueryParsingException(s"unknown datatype: ${ filter.field.dataType }")
     }
   }
@@ -464,8 +449,8 @@ class ElasticsearchGenerator extends IQLGenerator {
         val values = filter.values.map(_.asInstanceOf[String])
         s"""{"match": {"$fieldExpr": "${values(0)}"}}"""
       }
-      case Relation.!= => throw new QueryParsingException("filter relation not implemented in Elasticsearch adapter")
-      case Relation.contains => throw new QueryParsingException("filter relation not implemented in Elasticsearch adapter")
+      case Relation.!= => throw new QueryParsingException("filter relation: !=, not implemented in Elasticsearch adapter")
+      case Relation.contains => throw new QueryParsingException("filter relation: contains, not implemented in Elasticsearch adapter")
     }
   }
 

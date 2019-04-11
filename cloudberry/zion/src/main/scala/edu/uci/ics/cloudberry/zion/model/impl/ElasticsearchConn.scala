@@ -111,11 +111,11 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
     jsonQuery -= "selectFields"
     jsonQuery -= "joinTermsFilter"
 
-    Logger.info("Query: " + query)
-    Logger.info("method: " + method)
-    Logger.info("dataset: " + dataset)
-    Logger.info("aggregation: " + aggregation)
-    Logger.info("jsonQuery: " + jsonQuery.toString())
+//    Logger.info("Query: " + query)
+//    Logger.info("method: " + method)
+//    Logger.info("dataset: " + dataset)
+//    Logger.info("aggregation: " + aggregation)
+//    Logger.info("jsonQuery: " + jsonQuery.toString())
 
     val f = method match {
       case "create" => wSClient.url(queryURL).withHeaders(("Content-Type", "application/json")).withRequestTimeout(Duration.Inf).put(jsonQuery)
@@ -196,7 +196,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
           }
         }
       }
-      println("resArray is: " + resArray)
+//      println("resArray is: " + resArray)
       return resArray
     }
 
@@ -225,7 +225,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         Json.arr(Json.obj(asField -> count))
       }
       case "min" | "max" => { // Aggregation (function: min/max)
-        println("min/max response: " + response)
+//        println("min/max response: " + response)
         val asField = (jsonQuery \ "aggregation" \ "as").get.toString().stripPrefix("\"").stripSuffix("\"")
 //        if (bucket.keys.contains("key_as_string")) (bucket \ "key_as_string").get else (bucket \ "key").get
 
@@ -245,7 +245,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
 //        println(s"$asField return: " + Json.arr(Json.obj(asField -> JsString(""))))
 //        Json.arr(Json.obj(asField -> JsString("")))
-        println(s"$asField return: " + Json.arr())
+//        println(s"$asField return: " + Json.arr())
         Json.arr()
       }
       case _ => ??? // Unmatched

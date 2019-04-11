@@ -1,16 +1,11 @@
-# Data Preparation
+# Create berry.meta
 
-
-# Query
-
-## Create Index
-
-AsterixDB:
+* AsterixDB:
 ```
 create dataverse berry if not exists;
 ```
 
-Elasticsearch:
+* Elasticsearch:
 ```
 curl -X PUT "localhost:9200/berry.meta" -H 'Content-Type: application/json' -d'
 {
@@ -34,46 +29,39 @@ curl -X PUT "localhost:9200/berry.meta" -H 'Content-Type: application/json' -d'
 '
 ```
 
-In Elasticsearch, creating existing index results in status code: `400`. Creating non-existing index results in status code: `200`.
+**In Elasticsearch, creating existing index results in status code: `400`. Creating non-existing index results in status code: `200`.**
 
 
+# Create twitter.ds_tweet
+
+* Elasticsearch
+```
+curl -X PUT "localhost:9200/twitter.ds_tweet" -H 'Content-Type: application/json' -d'
+{
+    "mappings" : {
+       "_doc" : {
+            "properties" : {    
+               "create_at" : { "type": "date", "format": "strict_date_time" },
+               "user.create_at" : { "type" : "date", "format": "strict_date_time" }
+            }
+       }
+    },
+    "settings": {
+        "index": {
+            "max_result_window": 2147483647
+        }
+    }
+}
+'
+```
 
 
+# Delete Index
 
+* Elasticsearch:
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Count documents in index
-
-`curl -X GET "localhost:9200/twitter.dscountypopulation/_doc/_count"`
-
-
-# Query Error code
-Elasticsearch:
 If deleting non-existing database, status code is `404` with the following code block:
+
 ```
 curl -X DELETE "localhost:9200/test"
 result:
@@ -100,28 +88,6 @@ result:
 }
 ```
 
-Creating exisiting database (result in `400`):
-```
-curl -X PUT "localhost:9200/test"
-result:
-{
-    "error": {
-        "root_cause": [
-            {
-                "type": "resource_already_exists_exception",
-                "reason": "index [test/HBZqZlPHRgW79zZH7OUb1w] already exists",
-                "index_uuid": "HBZqZlPHRgW79zZH7OUb1w",
-                "index": "test"
-            }
-        ],
-        "type": "resource_already_exists_exception",
-        "reason": "index [test/HBZqZlPHRgW79zZH7OUb1w] already exists",
-        "index_uuid": "HBZqZlPHRgW79zZH7OUb1w",
-        "index": "test"
-    },
-    "status": 400
-}
-```
 
 # Setting
 Configure index.max_result_window:
@@ -134,34 +100,17 @@ curl -X PUT "http://localhost:9200/twitter.ds_tweet/_settings" -H 'Content-Type:
 ```
 
 
-
-create twitter.ds_tweet
-
-```
-curl -X PUT "localhost:9200/twitter.ds_tweet" -H 'Content-Type: application/json' -d'
-{
-    "mappings" : {
-       "_doc" : {
-            "properties" : {    
-               "create_at" : { "type" : "date", "format": "strict_date_time" },
-               "user.create_at" : { "type" : "date", "format": "strict_date" }
-            }
-       }
-    },
-    "settings": {
-        "index": {
-            "max_result_window": 2147483647
-        }
-    }
-}
-'
-```
-
 # Ingest Data
 
 `curl -o /dev/null -H "Content-Type: application/json" -XPOST "localhost:9200/berry.meta/_doc/_bulk?pretty&refresh" --data-binary "@sample_berry.json"`
 
-# Query 1 (select all)
+
+# Count documents in index
+
+`curl -X GET "localhost:9200/twitter.dscountypopulation/_doc/_count"`
+
+
+# Select All
 
 AsterixDB:
 
@@ -179,7 +128,7 @@ Elasticsearch:
 curl -X GET "localhost:9200/berry.meta/_search" -H 'Content-Type: application/json' -d'
 {
     "sort" : [
-        { "stats.createTime" : {"order" : "desc"}}
+        { "stats.createTime" : {"order" : "desc"} }
     ],
     "from": 0,
     "size": 2147483647
@@ -327,7 +276,7 @@ curl -X GET "localhost:9200/twitter.ds_tweet/_search?pretty" -H 'Content-Type: a
             {
                 "match": {
                     "text": {
-                        "query": "trump,vote",
+                        "query": "love",
                         "operator" : "and"
                     } 
                 }
