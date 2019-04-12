@@ -1,3 +1,6 @@
+# Update Refresh Interval
+`curl -X PUT "localhost:9200/twitter.ds_tweet/_settings" -H 'Content-Type: application/json' -d '{ "index" : { "refresh_interval" : "60s" } }'`
+
 # Create berry.meta
 
 * AsterixDB:
