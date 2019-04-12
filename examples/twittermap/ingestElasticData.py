@@ -2,13 +2,13 @@ import json
 import glob
 import os
 
-OUTPUT_PATH = "/Users/dayuebai/gitclones/cloudberry/examples/twittermap/"
+OUTPUT_PATH = "/arbitrary directory"
 FILES = glob.glob("*.json")
 # print(FILES)
 
 for i in FILES:
     print(i)
-    with open(i, "r") as f, open(OUTPUT_PATH + "new-" + i, "w") as g:
+    with open(i, "r") as f, open(OUTPUT_PATH + i, "w") as g:
         for line in f:
             try:
                 json_data = json.loads(line)
@@ -21,4 +21,4 @@ for i in FILES:
                 g.write("\n")
             except Exception:
                 pass
-    # os.remove(i)
+    os.remove(i)
