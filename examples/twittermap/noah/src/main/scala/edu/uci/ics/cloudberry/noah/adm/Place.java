@@ -1,6 +1,9 @@
 package edu.uci.ics.cloudberry.noah.adm;
 
+import edu.uci.ics.cloudberry.util.Rectangle;
 import twitter4j.GeoLocation;
+
+import static edu.uci.ics.cloudberry.noah.adm.ADM.coordinates2Rectangle;
 
 public class Place {
 
@@ -21,9 +24,22 @@ public class Place {
         ADM.keyValueToSbWithComma(sb, ID, ADM.mkQuote(String.valueOf(place.getId())));
         ADM.keyValueToSbWithComma(sb, NAME, ADM.mkQuote(place.getName()));
         ADM.keyValueToSbWithComma(sb, PLACE_TYPE, ADM.mkQuote(place.getPlaceType()));
-        ADM.keyValueToSb(sb, BOUNDING_BOX, ADM.mkRectangleConstructor(place.getBoundingBoxCoordinates()));
+        ADM.keyValueToSb(sb, BOUNDING_BOX, ADM.mkQuote(mkRectangleConstructor(place.getBoundingBoxCoordinates())));
         sb.append("}");
         return sb.toString();
     }
 
+    private static String mkRectangleConstructor(GeoLocation[][] boundingBoxCoordinates)
+            throws IllegalArgumentException {
+        StringBuilder sb = new StringBuilder("LINESTRING");
+
+        Rectangle rectangle = coordinates2Rectangle(boundingBoxCoordinates);
+        sb.append("(").append(rectangle.swLog()).append(' ')
+                .append(rectangle.swLat())
+                .append(',')
+                .append(rectangle.neLog()).append(' ')
+                .append(rectangle.neLat())
+                .append(")");
+        return sb.toString();
+    }
 }
