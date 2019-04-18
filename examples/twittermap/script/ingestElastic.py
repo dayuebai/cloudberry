@@ -5,7 +5,7 @@ from urllib import request
 
 COUNTER = 0
 BUFFER_SIZE_LIMIT = 20000
-URL = "http://128.195.52.81:9200/twitter.ds_tweet/_doc/_bulk?refresh"
+URL = "http://128.195.52.81:9200/twitter.ds_tweet/_doc/_bulk"
 HEADERS = {"Content-type": "application/json"}
 buffer = []
 
