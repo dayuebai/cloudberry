@@ -23,4 +23,5 @@ java -cp /home/waans11/es-adapter/cloudberry/examples/twittermap/noah/target/sca
    -state /home/waans11/es-adapter/cloudberry/examples/twittermap/web/public/data/state.json \
    -county /home/waans11/es-adapter/cloudberry/examples/twittermap/web/public/data/county.json \
    -city /home/waans11/es-adapter/cloudberry/examples/twittermap/web/public/data/city.json \
-   -thread $thread
+   -thread $thread \
+   -fileFormat "JSON"
