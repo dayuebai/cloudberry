@@ -52,14 +52,13 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 //      println("headQuery: " + headQuery)
 //      println("after drop, jsonquery is: " + jsonQuery)
 
-      val c = post(headQuery).map { wsResponse =>
+      post(headQuery).map { wsResponse =>
         val responseCode = wsResponse.status
 //        println("multi post Query, status code: " + responseCode + " query: " + headQuery)
       }
-      Await.ready(c, Duration.Inf)
     }
 
-    val r = post(jsonQuery.head.toString()).map { wsResponse =>
+    post(jsonQuery.head.toString()).map { wsResponse =>
       val responseCode = wsResponse.status
       if (responseCode == 200) {
 //        Logger.info("FINISH TRANSACTION")
@@ -70,7 +69,6 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
         failureHandler(wsResponse)
       }
     }
-    Await.ready(r, Duration.Inf)
   }
 
   def post(query: String): Future[WSResponse] = {
@@ -235,7 +233,7 @@ class ElasticsearchConn(url: String, wSClient: WSClient)(implicit ec: ExecutionC
 
           if (res != JsNull) {
             val jsonObjRes = Json.obj(asField -> res)
-            println(s"$asField return: " + Json.arr(jsonObjRes))
+//            println(s"$asField return: " + Json.arr(jsonObjRes))
             return Json.arr(jsonObjRes)
           }
         }
