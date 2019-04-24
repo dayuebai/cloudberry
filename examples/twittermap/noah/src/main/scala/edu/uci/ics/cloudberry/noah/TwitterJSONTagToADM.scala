@@ -2,7 +2,7 @@ package edu.uci.ics.cloudberry.noah
 
 import java.io.File
 import java.util.concurrent.Executors
-
+import play.api.libs.json._
 import edu.uci.ics.cloudberry.gnosis._
 import edu.uci.ics.cloudberry.noah.adm.Tweet
 import edu.uci.ics.cloudberry.util.Profile._
@@ -49,7 +49,13 @@ object TwitterJSONTagToADM {
         if (adm.length > 0) println(adm)
       } else {
         val json = Tweet.toJSON(TwitterObjectFactory.createStatus(ln), usGeoGnosis, true)
-        if (json.length > 0) println(json)
+        if (json.length > 0) {
+          val obj = Json.parse(json).as[JsObject]
+          val twitterId = (obj \ "id").get.toString()
+          val indexStr = s"""{ "index": {"_id": "$twitterId" } }"""
+          println(indexStr)
+          println(json)
+        }
       }
     } catch {
       case e: Throwable => {

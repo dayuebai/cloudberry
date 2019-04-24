@@ -60,7 +60,7 @@ object Migration_20170428 {
   val TwitterMapDDL: String =
     """
       |{
-      |  "dataset":"twitter.ds_tweet",
+      |  "dataset":"twitter2",
       |  "schema":{
       |  	"typeName":"twitter.typeTweet",
       |    "dimension":[
