@@ -53,8 +53,7 @@ object TwitterJSONTagToADM {
           val obj = Json.parse(json).as[JsObject]
           val twitterId = (obj \ "id").get.toString()
           val indexStr = s"""{ "index": {"_id": "$twitterId" } }"""
-          println(indexStr)
-          println(json)
+          println(indexStr + "\n" + json)
         }
       }
     } catch {

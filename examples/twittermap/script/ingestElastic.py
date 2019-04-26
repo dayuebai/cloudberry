@@ -4,8 +4,8 @@ from urllib import request
 
 
 COUNTER = 0
-BUFFER_SIZE_LIMIT = 20000
-URL = "http://128.195.52.81:9200/twitter.ds_tweet/_doc/_bulk"
+BUFFER_SIZE_LIMIT = 40000
+URL = "http://128.195.52.81:9200/twitter3/_doc/_bulk"
 HEADERS = {"Content-type": "application/json"}
 buffer = []
 
@@ -24,7 +24,7 @@ for tweet in sys.stdin:
 		# buffer.append(json.dumps(tweet_dict)) # Convert Python dict to JSON
 	else:
 		COUNTER = 0
-		data = ("".join(buffer) + "\n").encode("utf-8")
+		data = ("".join(buffer)).encode("utf-8")
 		buffer = []
 		req = request.Request(URL, data=data, headers=HEADERS)
 		print("Start bulk ingestion...")
@@ -32,7 +32,7 @@ for tweet in sys.stdin:
 		print("Finish bulk ingestion...")
 
 if buffer != []:
-	data = ("\n".join(buffer) + "\n").encode("utf-8")
+	data = ("".join(buffer)).encode("utf-8")
 	req = request.Request(URL, data=data, headers=HEADERS)
 	print("Start bulk ingestion...")
 	res = request.urlopen(req)

@@ -60,7 +60,7 @@ for i in /home/waans11/twitter/Tweet_2016-08-26_17_56_00-00-after-i4-start-from-
 	date
 	filename=$(echo $i | cut -f 1 -d '.')
 	echo current file is $filename
-	# gunzip -c $i | ./geotag.sh 7 2>&1 | python ingestElastic.py
+	gunzip -c $i | ./geotag.sh 15 2>&1 | python ingestElastic.py
 	date
 	rm -f $filename
 done
