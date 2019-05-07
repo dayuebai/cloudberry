@@ -51,7 +51,7 @@ public class User {
         ADM.keyValueToSbWithComma(sb, LANG, ADM.mkQuote(user.getLang()));
         ADM.keyValueToSbWithComma(sb, LOCATION, ADM.mkQuote(user.getLocation()));
 
-        ADM.keyValueToSbWithComma(sb, CREATE_AT, ADM.mkQuote(ADMDateFormat.format(user.getCreatedAt()) + "T" + ADMTimeFormat.format(user.getCreatedAt())));
+        ADM.keyValueToSbWithComma(sb, CREATE_AT, ADM.mkQuote(ADM.mkJSONDateTimeConstructor(user.getCreatedAt())));
         ADM.keyValueToSbWithComma(sb, DESCRIPTION, ADM.mkQuote(user.getDescription()));
         ADM.keyValueToSbWithComma(sb, FOLLOWERS_COUNT, String.valueOf(user.getFollowersCount()));
         ADM.keyValueToSbWithComma(sb, FRIENDS_COUNT, String.valueOf(user.getFriendsCount()));

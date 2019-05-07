@@ -41,6 +41,10 @@ public class ADM {
         return "datetime(\"" + ADMDateFormat.format(jdate) + "T" + ADMTimeFormat.format(jdate) + "\")";
     }
 
+    public synchronized static String mkJSONDateTimeConstructor(Date jdate) {
+        return ADMDateFormat.format(jdate) + "T" + ADMTimeFormat.format(jdate);
+    }
+
     public static Rectangle coordinates2Rectangle(GeoLocation[][] boundingBoxCoordinates){
         if (boundingBoxCoordinates.length != 1 || boundingBoxCoordinates[0].length != 4) {
             throw new IllegalArgumentException("unknown boundingBoxCoordinates");

@@ -35,7 +35,7 @@ public class Tweet {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
 
-        ADM.keyValueToSbWithComma(sb, CREATE_AT, ADM.mkQuote(ADMDateFormat.format(status.getCreatedAt()) + "T" + ADMTimeFormat.format(status.getCreatedAt())));
+        ADM.keyValueToSbWithComma(sb, CREATE_AT, ADM.mkQuote(ADM.mkJSONDateTimeConstructor(status.getCreatedAt())));
         ADM.keyValueToSbWithComma(sb, ID, String.valueOf(status.getId()));
         ADM.keyValueToSbWithComma(sb, TEXT, ADM.mkQuote(status.getText()));
         ADM.keyValueToSbWithComma(sb, IN_REPLY_TO_STATUS, String.valueOf(status.getInReplyToStatusId()));
