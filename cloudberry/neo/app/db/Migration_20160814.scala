@@ -66,7 +66,9 @@ private[db] class Migration_20160814() {
              |},
              |"settings": {
              |  "index": {
-             |    "max_result_window": 2147483647
+             |    "max_result_window": 2147483647,
+             |    "number_of_shards" : 1,
+             |    "number_of_replicas" : 0
              |  }
              |},
              |"method": "create",

@@ -126,7 +126,7 @@ class ElasticsearchGenerator extends IQLGenerator {
       s"""{ "method": "drop", "dataset": "$dataset" }"""
     )
     val createStatement = Json.parse(
-      s"""{ "method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } }, "settings": { "index": { "max_result_window": 2147483647 } } }"""
+      s"""{ "method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } }, "settings": { "index": { "max_result_window": 2147483647, "number_of_shards" : 4, "number_of_replicas" : 0 } } }"""
     )
     val selectStatement = Json.parse(parseQuery(create.query, schemaMap)).as[JsObject]
 
