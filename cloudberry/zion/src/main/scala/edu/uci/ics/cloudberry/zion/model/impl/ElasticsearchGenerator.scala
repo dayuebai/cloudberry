@@ -6,10 +6,9 @@ import edu.uci.ics.cloudberry.zion.model.schema._
 import play.api.libs.json._
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 /**
-  * Defines constant strings for query languages supported by AsterixDB
+  * Defines constant strings for query languages supported by Elasticsearch
   */
 trait ElasticImpl {
 
@@ -55,24 +54,19 @@ class ElasticsearchGenerator extends IQLGenerator {
 
   protected val allFieldVar: String = "*"
 
-  // Global variable: JOIN field
-  protected var joinTermsFilter = Seq[Int]()
+  protected var joinTermsFilter = Seq[Int]() // Global variable: JOIN field
 
   protected val typeImpl: ElasticImpl = ElasticImpl
 
   def generate(query: IQuery, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Start to generate query: " + query);
-    val (temporalSchemaMap, lookupSchemaMap) = GeneratorUtil.splitSchemaMap(schemaMap)
+    val temporalSchemaMap = GeneratorUtil.splitSchemaMap(schemaMap)._1
     val result = query match {
       case q: Query => parseQuery(q, temporalSchemaMap)
       case q: CreateView => parseCreate(q, temporalSchemaMap)
       case q: AppendView => parseAppend(q, temporalSchemaMap)
       case q: UpsertRecord => parseUpsert(q, schemaMap)
-//      case q: DropView => parseDrop(q, schemaMap)
-//      case q: DeleteRecord => parseDelete(q, schemaMap)
       case _ => ???
     }
-//    println("Translated to: " + result)
     result
   }
 
@@ -84,16 +78,7 @@ class ElasticsearchGenerator extends IQLGenerator {
     }
   }
 
-  private def genProperties(schema: AbstractSchema): JsObject = {
-    var properties = Json.obj()
-    schema.fieldMap.values.filter(f => f.dataType == DataType.Time).foreach(
-      f => {properties += (f.name -> Json.parse("""{ "type" : "date", "format": "strict_date_time" }"""))}
-    )
-    properties
-  }
-
   private def parseQuery(query: Query, schemaMap: Map[String, Schema]): String = {
-//    println("parseQuery query: " + query)
     var queryBuilder = Json.obj()
 
     val exprMap: Map[String, FieldExpr] = initExprMap(query.dataset, schemaMap)
@@ -116,26 +101,18 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseCreate(create: CreateView, schemaMap: Map[String, Schema]): String = {
-//    println("Call parseCreate")
-    val dataset = create.dataset
-    val sourceSchema = schemaMap(create.query.dataset)
-    val resultSchema = calcResultSchema(create.query, sourceSchema)
-    val properties = genProperties(resultSchema)
-
-    val dropStatement = Json.parse(
-      s"""{ "method": "drop", "dataset": "$dataset" }"""
-    )
-    val createStatement = Json.parse(
-      s"""{ "method": "create", "dataset": "$dataset", "mappings": { "_doc": { "properties": $properties } }, "settings": { "index": { "max_result_window": 2147483647, "number_of_shards" : 4, "number_of_replicas" : 0 } } }"""
-    )
-    val selectStatement = Json.parse(parseQuery(create.query, schemaMap)).as[JsObject]
-
     var source = Json.obj()
-    source += ("index" -> JsString(create.query.dataset))
-    source += ("query" -> (selectStatement \ "query").get)
+    val dataset = create.dataset
+    var reindexStatement = Json.obj()
+
+    val dropStatement = Json.parse(s"""{ "method": "drop", "dataset": "$dataset" }""")
+    val createStatement = Json.parse(s"""{ "method": "create", "dataset": "$dataset"}""")
+    val selectStatement = Json.parse(parseQuery(create.query, schemaMap)).as[JsObject]
     val dest = Json.parse(s""" { "index": "$dataset" } """)
 
-    var reindexStatement = Json.obj()
+    source += ("index" -> JsString(create.query.dataset))
+    source += ("query" -> (selectStatement \ "query").get)
+
     reindexStatement += ("method" -> JsString("reindex"))
     reindexStatement += ("source" -> source)
     reindexStatement += ("dest" -> dest)
@@ -145,23 +122,22 @@ class ElasticsearchGenerator extends IQLGenerator {
   }
 
   private def parseAppend(append: AppendView, schemaMap: Map[String, Schema]): String = {
-//    println("Call parseAppend")
     val selectStatement = Json.parse(parseQuery(append.query, schemaMap)).as[JsObject]
+    val dest = Json.parse(s""" { "index": "${append.dataset}" } """)
+    var reindexStatement = Json.obj()
     var source = Json.obj()
+
     source += ("index" -> JsString(append.query.dataset))
     source += ("query" -> (selectStatement \ "query").get)
-    val dest = Json.parse(s""" { "index": "${append.dataset}" } """)
 
-    var reindexStatement = Json.obj()
     reindexStatement += ("method" -> JsString("reindex"))
     reindexStatement += ("source" -> source)
     reindexStatement += ("dest" -> dest)
-//    println("parseAppend returns: " + reindexStatement.toString())
+
     reindexStatement.toString()
   }
 
   private def parseUpsert(q: UpsertRecord, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Call parseUpsert")
     var queryBuilder = Json.obj()
     var recordBuilder = Json.arr()
     val schema = schemaMap(q.dataset)
@@ -175,46 +151,35 @@ class ElasticsearchGenerator extends IQLGenerator {
         val id = (record \ (field.name)).get.toString()
         idBuilder.append(id)
       }
-      // println("id: " + idBuilder.toString)
       recordBuilder = recordBuilder :+ Json.obj(("update" -> Json.obj("_id" -> Json.parse(idBuilder.toString))))
       docBuilder += ("doc" -> record)
       docBuilder += ("doc_as_upsert" -> JsBoolean(true))
       recordBuilder = recordBuilder :+ docBuilder
     }
+
     queryBuilder += ("method" -> JsString("upsert"))
     queryBuilder += ("dataset" -> JsString(q.dataset))
     queryBuilder += ("records" -> recordBuilder)
     queryBuilder.toString()
   }
 
-//  private def parseDrop(query: DropView, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Call parseDrop")
-//    return ""
-//  }
-//
-//  private def parseDelete(delete: DeleteRecord, schemaMap: Map[String, AbstractSchema]): String = {
-//    println("Call parseDelete")
-//    return ""
-//  }
-
   private def parseUnnest(unnest: Seq[UnnestStatement],
                           exprMap: Map[String, FieldExpr]): Map[String, FieldExpr] = {
     val producedExprs = mutable.LinkedHashMap.newBuilder[String, FieldExpr]
-    val unnestTestStrs = new ListBuffer[String]
+
     unnest.foreach {
       u =>
         val expr = exprMap(u.field.name)
         producedExprs += (u.as.name -> expr)
     }
+
     (producedExprs ++= exprMap).result().toMap
   }
 
   private def parseFilter(filters: Seq[FilterStatement], exprMap: Map[String, FieldExpr], queryBuilder: JsObject): (ParsedResult, JsObject) = {
     var shallowQuery = queryBuilder
-//    println("PARSE FILTER EXPRMAP: " + exprMap)
-    if (filters.isEmpty) {
-      (ParsedResult(Seq.empty, exprMap), shallowQuery)
-    } else {
+
+    if (filters.nonEmpty) {
       val filterStrs = filters.map { filter =>
         parseFilterRelation(filter, exprMap(filter.field.name).refExpr)
       }
@@ -222,8 +187,9 @@ class ElasticsearchGenerator extends IQLGenerator {
 
       shallowQuery += ("query" -> Json.obj("bool" -> Json.parse(filterStr)))
 
-      (ParsedResult(Seq.empty, exprMap), shallowQuery)
+      return (ParsedResult(Seq.empty, exprMap), shallowQuery)
     }
+    (ParsedResult(Seq.empty, exprMap), shallowQuery)
   }
 
   private def parseGroupby(groupOpt: Option[GroupStatement],
@@ -234,61 +200,34 @@ class ElasticsearchGenerator extends IQLGenerator {
     var shallowQueryAfterAppend = queryAfterAppend
     groupOpt match {
       case Some(group) =>
-//        println("**parse group by groupstatement: " + groupOpt.get)
         shallowQueryAfterAppend += ("size" -> JsNumber(0))
         val groupStr = new mutable.StringBuilder()
+        val isLookUp = group.lookups.isEmpty
         var groupAsArray = Json.arr()
-
         for (i <- group.bys.indices) {
           val by = group.bys(i)
           val fieldExpr = exprMap(by.field.name)
           val as = by.as.getOrElse(by.field).name
           groupAsArray = groupAsArray.append(JsString(as))
+
           if (i == 0)
             groupStr.append(s"""{"$as": {""")
           else
             groupStr.append(s""","aggs": {"$as": {""")
-          by.funcOpt match {
-            case Some(func) =>
-              func match {
-                case bin: Bin => ???
-                case interval: Interval => // assume has time field
-                  val duration = parseIntervalDuration(interval)
-                  groupStr.append(s""" "date_histogram": {"field": "${fieldExpr.refExpr}", "interval": "$duration"} """.stripMargin)
-                case level: Level => {
-                  val hierarchyField = by.field.asInstanceOf[HierarchyField]
-                  val field = hierarchyField.levels.find(_._1 == level.levelTag).get._2
-                  if (group.lookups.isEmpty) {
-                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647} """.stripMargin)
-                  }
-                  else { // hard coded sequence for later joins
-                    groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "order": {"_key":"asc"}} """.stripMargin)
-                  }
-                }
-                case _ => throw new QueryParsingException(s"unknown function: ${func.name}")
-              }
-            case None => { // for hash tags
-              val orderStr = if (selectOpt.get.order.head == SortOrder.DSC) "desc" else "asc"
-              groupStr.append(s""" "terms": {"field": "${fieldExpr.refExpr}.keyword", "size": ${selectOpt.get.limit}, "order": {"_count": "$orderStr"}} """)
-            }
-          }
+          parseGroupByFunc(by, fieldExpr.refExpr, groupStr, isLookUp, selectOpt)
         }
         groupStr.append("}" * group.bys.length * 2)
         shallowQueryAfterAppend += ("aggs" -> Json.parse(groupStr.toString))
 
-
-        // Only support single join (Snowflake not supported)
-        if (!group.lookups.isEmpty) {
-
+        if (group.lookups.nonEmpty) {
           var queryArray = Json.arr()
           val selectDataset = (shallowQueryAfterAppend \ "dataset").get.as[JsString]
           shallowQueryAfterAppend -= "dataset"
           shallowQueryAfterAppend -= "method"
           queryArray = queryArray :+ Json.obj("index" -> selectDataset)
           queryArray = queryArray :+ shallowQueryAfterAppend
-
           val body = group.lookups.head
-          val joinQuery = Json.parse(s"""{"_source": "${body.selectValues.head.name}", "size": 2147483647, "sort": {"${body.lookupKeys.head.name}": { "order": "asc" }}, "query": {"bool": {"must": {"terms": { "${body.lookupKeys.head.name}" : ${joinTermsFilter.mkString("[", ",", "]")} } } } } }""".stripMargin).as[JsObject]
+          val joinQuery = Json.parse(s"""{"_source": "${body.selectValues.head.name}", "size": 2147483647, "sort": {"${body.lookupKeys.head.name}": { "order": "asc" }}, "query": {"bool": {"must": {"terms": { "${body.lookupKeys.head.name}" : ${joinTermsFilter.mkString("[", ",", "]")} } } } } }""").as[JsObject]
           queryArray = queryArray :+ Json.obj("index" -> JsString(body.dataset.toLowerCase())) // The name of dataset in Elasticsearch must be in lowercase.
           queryArray = queryArray :+ joinQuery
 
@@ -300,7 +239,6 @@ class ElasticsearchGenerator extends IQLGenerator {
 
           return (ParsedResult(Seq.empty, exprMap), multiSearchQuery)
         }
-
         shallowQueryAfterAppend += ("groupAsList" -> groupAsArray)
         (ParsedResult(Seq.empty, exprMap), shallowQueryAfterAppend)
 
@@ -314,6 +252,7 @@ class ElasticsearchGenerator extends IQLGenerator {
                           exprMap: Map[String, FieldExpr],
                           queryAfterGroup: JsObject): (ParsedResult, JsObject) = {
     var shallowQueryAfterGroup = queryAfterGroup
+
     if (groupOpt.isEmpty && selectOpt.nonEmpty) {
       val select = selectOpt.get
       val orderStrs = select.orderOn.zip(select.order).map {
@@ -328,17 +267,12 @@ class ElasticsearchGenerator extends IQLGenerator {
         } else {
           ""
         }
-      val limit = select.limit
-      val offset = select.offset
-
+      shallowQueryAfterGroup += ("size" -> JsNumber(select.limit))
+      shallowQueryAfterGroup += ("from" -> JsNumber(select.offset))
       val source = select.fields.map(f => JsString(f.name))
 
       if (orderStr.nonEmpty)
         shallowQueryAfterGroup += ("sort" -> Json.parse(orderStr))
-      if (limit != None)
-        shallowQueryAfterGroup += ("size" -> JsNumber(limit))
-      if (offset != None)
-        shallowQueryAfterGroup += ("from" -> JsNumber(offset))
       if (source.nonEmpty)
         shallowQueryAfterGroup += ("_source" -> JsArray(source))
     }
@@ -368,10 +302,9 @@ class ElasticsearchGenerator extends IQLGenerator {
             shallowQueryAfterSelect += ("aggs" -> Json.obj( as -> Json.obj(funcName -> Json.obj("field" -> JsString(field)))))
           }
         }
-        shallowQueryAfterSelect
-      case None =>
-        shallowQueryAfterSelect
+      case None => return shallowQueryAfterSelect
     }
+    shallowQueryAfterSelect
   }
 
   private def initExprMap(dataset: String, schemaMap: Map[String, AbstractSchema]): Map[String, FieldExpr] = {
@@ -381,9 +314,7 @@ class ElasticsearchGenerator extends IQLGenerator {
       f.dataType match {
         case DataType.Record => FieldExpr(allFieldVar, allFieldVar)
         case DataType.Hierarchy => FieldExpr(allFieldVar, allFieldVar)
-        case _ => {
-          FieldExpr(f.name, f.name)
-        }
+        case _ => { FieldExpr(f.name, f.name) }
       }
     }
   }
@@ -403,42 +334,37 @@ class ElasticsearchGenerator extends IQLGenerator {
     filter.relation match {
       case Relation.inRange =>
         if (filter.values.size != 2) throw new QueryParsingException(s"relation: ${filter.relation} requires two parameters")
-        s"""{"range": {"$fieldExpr": {"gte": ${filter.values(0)}, "lt": ${filter.values(1)}}}}""".stripMargin
+        s"""{"range": {"$fieldExpr": {"gte": ${filter.values(0)}, "lt": ${filter.values(1)}}}}"""
       case Relation.in => {
         joinTermsFilter = filter.values.asInstanceOf[Seq[Int]]
-        s"""{"terms": {"$fieldExpr": [${filter.values.mkString(",")}]}}""".stripMargin
+        s"""{"terms": {"$fieldExpr": [${filter.values.mkString(",")}]}}"""
       }
       case Relation.< =>
-        s"""{"range": {"$fieldExpr": {"lt": ${filter.values(0)}}}}""".stripMargin
+        s"""{"range": {"$fieldExpr": {"lt": ${filter.values(0)}}}}"""
       case Relation.> =>
-        s"""{"range": {"$fieldExpr": {"gt": ${filter.values(0)}}}}""".stripMargin
+        s"""{"range": {"$fieldExpr": {"gt": ${filter.values(0)}}}}"""
       case Relation.<= =>
-        s"""{"range": {"$fieldExpr": {"lte": ${filter.values(0)}}}}""".stripMargin
+        s"""{"range": {"$fieldExpr": {"lte": ${filter.values(0)}}}}"""
       case Relation.>= =>
-        s"""{"range": {"$fieldExpr": {"gte": ${filter.values(0)}}}}""".stripMargin
+        s"""{"range": {"$fieldExpr": {"gte": ${filter.values(0)}}}}"""
       case Relation.== =>
-        s"""{"match": {"$fieldExpr": ${filter.values(0)}}}""".stripMargin
+        s"""{"match": {"$fieldExpr": ${filter.values(0)}}}"""
       case _ => throw new QueryParsingException("no supported parameter for this number in Elasticsearch")
     }
   }
 
   private def parseTimeRelation(filter: FilterStatement, fieldExpr: String): String = {
     filter.relation match {
-      case Relation.inRange => {
-        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "lt": "${filter.values(1)}", "format": "strict_date_time" }}}""".stripMargin
-      }
-      case Relation.< => {
-        s"""{"range": {"$fieldExpr": {"lt": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
-      }
-      case Relation.> => {
-        s"""{"range": {"$fieldExpr": {"gt": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
-      }
-      case Relation.<= => {
-        s"""{"range": {"$fieldExpr": {"lte": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
-      }
-      case Relation.>= => {
-        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "format": "strict_date_time" }}}""".stripMargin
-      }
+      case Relation.inRange =>
+        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}", "lt": "${filter.values(1)}"}}}"""
+      case Relation.< =>
+        s"""{"range": {"$fieldExpr": {"lt": "${filter.values(0)}"}}}"""
+      case Relation.> =>
+        s"""{"range": {"$fieldExpr": {"gt": "${filter.values(0)}"}}}"""
+      case Relation.<= =>
+        s"""{"range": {"$fieldExpr": {"lte": "${filter.values(0)}"}}}"""
+      case Relation.>= =>
+        s"""{"range": {"$fieldExpr": {"gte": "${filter.values(0)}"}}}"""
       case _ => throw new QueryParsingException("no supported parameter for this date in Elasticsearch")
     }
   }
@@ -469,6 +395,32 @@ class ElasticsearchGenerator extends IQLGenerator {
       case Week => "week"
       case Month => "month"
       case Year => "year"
+    }
+  }
+
+  private def parseGroupByFunc(by: ByStatement, fieldExpr: String, groupStr: StringBuilder, isLookUp: Boolean, selectOpt: Option[SelectStatement]): Unit = {
+    by.funcOpt match {
+      case Some(func) =>
+        func match {
+          case bin: Bin => ???
+          case interval: Interval =>
+            val duration = parseIntervalDuration(interval)
+            groupStr.append(s""" "date_histogram": {"field": "${fieldExpr}", "interval": "$duration"} """.stripMargin)
+          case level: Level => {
+            val hierarchyField = by.field.asInstanceOf[HierarchyField]
+            val field = hierarchyField.levels.find(_._1 == level.levelTag).get._2
+            if (isLookUp) {
+              groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647} """.stripMargin)
+            } else {
+              groupStr.append(s""" "terms": {"field": "${field}", "size": 2147483647, "order": {"_key":"asc"}} """.stripMargin)
+            }
+          }
+          case _ => throw new QueryParsingException(s"unknown function: ${func.name}")
+        }
+      case None => {
+        val orderStr = if (selectOpt.get.order.head == SortOrder.DSC) "desc" else "asc"
+        groupStr.append(s""" "terms": {"field": "${fieldExpr}.keyword", "size": ${selectOpt.get.limit}, "order": {"_count": "$orderStr"}} """)
+      }
     }
   }
 }
