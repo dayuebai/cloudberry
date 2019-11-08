@@ -11,7 +11,7 @@
 #         NOTES: ---
 #        AUTHOR: Dayue Bai (dayueb@uci.edu), Baihao Wang (baihaow@uci.edu)
 #  ORGANIZATION: ics.uci.edu
-#       CREATED: 11/02/2019 21:29:00 PM PDT
+#       CREATED: 11/02/2019 21:29:00 PM PST
 #      REVISION:  ---
 #===============================================================================
 
@@ -133,7 +133,8 @@ echo Start to ingest tweets...
 
 # The first argument after "./geotag.sh" means the number of threads used to ingest data. Feel free to change it to the number of threads your local machine has.
 # Run the following command under path: cloudberry/examples/twittermap/
-gunzip -c ./script/sample.json.gz | ./script/elasticGeoTag.sh 4 2>&1 | python ./script/ingestElasticData.py
+# Need to use Python 3.x in the following command.
+gunzip -c ./script/sample.json.gz | ./script/elasticGeoTag.sh 4 2>&1 | python3 ./script/ingestElasticData.py
 rm -f ./script/sample.json
 
 echo Finish ingesting tweets

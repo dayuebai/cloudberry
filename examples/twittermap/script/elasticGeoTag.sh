@@ -13,7 +13,7 @@
 #         NOTES: ---
 #        AUTHOR: Dayue Bai (dayueb@uci.edu), Baihao Wang (baihaow@uci.edu)
 #  ORGANIZATION: ics.uci.edu
-#       CREATED: 11/02/2019 21:29:00 PM PDT
+#       CREATED: 11/02/2019 21:29:00 PM PST
 #      REVISION:  ---
 #===============================================================================
 
