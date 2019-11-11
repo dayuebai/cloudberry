@@ -129,18 +129,21 @@ curl -X PUT "localhost:9200/_template/twitter" -H 'Content-Type: application/jso
 }
 '
 
+echo Show high-level information about indices in elasticsearch cluster BEFORE ingesting data
+curl -X GET "localhost:9200/_cat/indices?v"
+
 echo Start to ingest tweets...
 
 # The first argument after "./geotag.sh" means the number of threads used to ingest data. Feel free to change it to the number of threads your local machine has.
-# Run the following command under path: cloudberry/examples/twittermap/
+# Run the following command under path: ~/quick-start/cloudberry/examples/twittermap/
 # Need to use Python 3.x in the following command.
 gunzip -c ./script/sample.json.gz | ./script/elasticGeoTag.sh 4 2>&1 | python3 ./script/ingestElasticData.py
 rm -f ./script/sample.json
 
 echo Finish ingesting tweets
 
-echo Show indices stored in Elasticsearch
+echo Show high-level information about indices in elasticsearch cluster AFTER ingesting data
 curl -X GET "localhost:9200/_cat/indices?v"
 
-echo Done
-EOP
+echo Finish ingesting data
+EOF
