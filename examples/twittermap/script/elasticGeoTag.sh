@@ -17,11 +17,12 @@
 #      REVISION:  ---
 #===============================================================================
 
+set -o nounset                              # Treat unset variables as an error
+
 thread=${1:-1}
-java -cp /home/waans11/es-adapter/cloudberry/examples/twittermap/noah/target/scala-2.11/noah-assembly-1.0-SNAPSHOT.jar \
-  edu.uci.ics.cloudberry.noah.TwitterJSONTagToADM \
-   -state /home/waans11/es-adapter/cloudberry/examples/twittermap/web/public/data/state.json \
-   -county /home/waans11/es-adapter/cloudberry/examples/twittermap/web/public/data/county.json \
-   -city /home/waans11/es-adapter/cloudberry/examples/twittermap/web/public/data/city.json \
-   -thread $thread \
-   -fileFormat "JSON"
+sbt -mem 2048 "project noah" --error 'set showSuccess := false'  "run-main edu.uci.ics.cloudberry.noah.TwitterJSONTagToADM\
+    -state web/public/data/state.json\
+    -county web/public/data/county.json \
+    -city web/public/data/city.json \
+    -thread $thread \
+    -fileFormat \"JSON\""

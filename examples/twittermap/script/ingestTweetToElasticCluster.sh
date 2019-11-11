@@ -17,7 +17,7 @@
 
 set -o nounset # Treat unset variables as an error
 
-# Register the schema of twitter dataset in Elasticsearch
+printf "[info] Creating an index named twitter.ds_tweet with the following schema in Elasticsearch...\n\n"
 curl -X PUT "localhost:9200/twitter.ds_tweet" -H 'Content-Type: application/json' -d'
 {
     "mappings" : {
@@ -65,15 +65,13 @@ curl -X PUT "localhost:9200/twitter.ds_tweet" -H 'Content-Type: application/json
         "index": {
 	        "max_result_window": 2147483647,
 	        "number_of_replicas": 0,
-	        "number_of_shards": 4,
-	        "sort.field": "create_at",
-	        "sort.order": "desc"
+	        "number_of_shards": 4
         }
     }
 }
 '
 
-# Register the schema of view table in Elasticsearch
+printf "\n\n[info] Creating a template named twitter the following schema in Elasticsearch...\nThis template is used for creating view table in Cloudberry...\n\n"
 curl -X PUT "localhost:9200/_template/twitter" -H 'Content-Type: application/json' -d'
 {
     "index_patterns": ["twitter.ds_tweet_*"],
@@ -129,21 +127,23 @@ curl -X PUT "localhost:9200/_template/twitter" -H 'Content-Type: application/jso
 }
 '
 
-echo Show high-level information about indices in elasticsearch cluster BEFORE ingesting data
+printf "\n\n[info] Showing high-level information about indices in the Elasticsearch cluster BEFORE ingesting data...\n\n"
 curl -X GET "localhost:9200/_cat/indices?v"
 
-echo Start to ingest tweets...
+printf "\n[info] Showing information about templates in the Elasticsearch cluster...\n\n"
+curl -X GET "localhost:9200/_cat/templates?v&s=name&pretty"
 
+printf "\n[info] Compiling geo tag modules...\n\n"
+sbt "project noah" assembly
+
+printf "\n\n[info] Start to ingest tweets...\n\n"
 # The first argument after "./geotag.sh" means the number of threads used to ingest data. Feel free to change it to the number of threads your local machine has.
 # Run the following command under path: ~/quick-start/cloudberry/examples/twittermap/
 # Need to use Python 3.x in the following command.
 gunzip -c ./script/sample.json.gz | ./script/elasticGeoTag.sh 4 2>&1 | python3 ./script/ingestElasticData.py
-rm -f ./script/sample.json
 
-echo Finish ingesting tweets
-
-echo Show high-level information about indices in elasticsearch cluster AFTER ingesting data
+sleep 2 # Waiting for Elasticsearch indexing process
+printf "\n\n[info] Showing high-level information about indices in Elasticsearch cluster AFTER ingesting data...\n\n"
 curl -X GET "localhost:9200/_cat/indices?v"
 
-echo Finish ingesting data
-EOF
+printf "\n\n[success] Finish ingesting tweets"

@@ -68,7 +68,6 @@ object TwitterJSONTagToADM {
 
   //TODO make a parallel version of this one
   def main(args: Array[String]): Unit = {
-    //    println("Args: " + args.toString());
     parseOption(args.toList)
     val usGeoGnosis = profile("loading resource") {
       new USGeoGnosis(shapeMap.mapValues(new File(_)).toMap)
